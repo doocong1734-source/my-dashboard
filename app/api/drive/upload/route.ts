@@ -1,7 +1,6 @@
 import { google } from 'googleapis'
 import { NextRequest, NextResponse } from 'next/server'
 import { Readable } from 'stream'
-import { assertFolderInsideDashboard, ensureDashboardFolders } from '@/lib/drive-folders'
 import { getDriveAccessToken } from '@/lib/drive-auth'
 
 export async function POST(req: NextRequest) {
@@ -28,10 +27,7 @@ export async function POST(req: NextRequest) {
     const oauth2Client = new google.auth.OAuth2()
     oauth2Client.setCredentials({ access_token: auth.accessToken })
     const drive = google.drive({ version: 'v3', auth: oauth2Client })
-    const folders = await ensureDashboardFolders(drive)
-
-    const targetFolderId = folderId || folders.uploadsId
-    await assertFolderInsideDashboard(drive, targetFolderId, folders.rootId)
+    const targetFolderId = folderId || 'root'
 
     const buffer = Buffer.from(await maybeFile.arrayBuffer())
     const res = await drive.files.create({

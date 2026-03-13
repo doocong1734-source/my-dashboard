@@ -1,7 +1,6 @@
 import { google } from 'googleapis'
 import { NextRequest, NextResponse } from 'next/server'
 import { getDriveAccessToken } from '@/lib/drive-auth'
-import { assertFileInsideDashboard, ensureDashboardFolders } from '@/lib/drive-folders'
 
 export async function DELETE(req: NextRequest) {
   const auth = await getDriveAccessToken(req, ['drive.write'])
@@ -16,9 +15,6 @@ export async function DELETE(req: NextRequest) {
     const oauth2Client = new google.auth.OAuth2()
     oauth2Client.setCredentials({ access_token: auth.accessToken })
     const drive = google.drive({ version: 'v3', auth: oauth2Client })
-    const folders = await ensureDashboardFolders(drive)
-
-    await assertFileInsideDashboard(drive, body.fileId, folders.rootId)
 
     await drive.files.delete({ fileId: body.fileId })
     return NextResponse.json({ success: true })

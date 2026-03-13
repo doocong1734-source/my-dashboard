@@ -1,6 +1,11 @@
 import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 
+const nextAuthUrl = process.env.NEXTAUTH_URL?.replace(/\/$/, '')
+const googleRedirectUri = nextAuthUrl
+  ? `${nextAuthUrl}/api/auth/callback/google`
+  : undefined
+
 type RefreshTokenResponse = {
   access_token: string
   expires_in: number
@@ -55,6 +60,7 @@ export const authOptions: NextAuthOptions = {
           scope: 'openid email profile https://www.googleapis.com/auth/drive',
           access_type: 'offline',
           prompt: 'consent',
+          ...(googleRedirectUri ? { redirect_uri: googleRedirectUri } : {}),
         },
       },
     }),

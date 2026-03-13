@@ -15,14 +15,6 @@ type DriveFile = {
 
 type Breadcrumb = { id: string | null; name: string }
 
-type DashboardFolders = {
-  rootId: string
-  schedulesId: string
-  jobsId: string
-  documentsId: string
-  uploadsId: string
-}
-
 function getFileIcon(mimeType: string) {
   if (mimeType.includes('folder')) return { icon: Folder, bg: 'bg-[#FFE500]' }
   if (mimeType.includes('image')) return { icon: Image, bg: 'bg-[#74C0FC]' }
@@ -45,23 +37,10 @@ export default function DrivePage() {
   const [uploading, setUploading] = useState(false)
   const [search, setSearch] = useState('')
   const [currentFolder, setCurrentFolder] = useState<string | null>(null)
-  const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([{ id: null, name: 'my dashboard' }])
+  const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([{ id: 'root', name: '내 드라이브' }])
   const [preview, setPreview] = useState<DriveFile | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [dashboardFolders, setDashboardFolders] = useState<DashboardFolders | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-
-  async function ensureDashboardFolders() {
-    const res = await fetch('/api/drive/folders')
-    const data = await res.json()
-    if (!res.ok) {
-      throw new Error(data?.error || '대시보드 폴더를 준비하지 못했습니다.')
-    }
-    setDashboardFolders(data.folders)
-    setCurrentFolder(data.folders.rootId)
-    setBreadcrumbs([{ id: data.folders.rootId, name: 'my dashboard' }])
-    return data.folders as DashboardFolders
-  }
 
   async function fetchFiles(folderId: string | null = null) {
     setLoading(true)
@@ -88,9 +67,8 @@ export default function DrivePage() {
 
   useEffect(() => {
     if (!session?.accessToken) return
-    ensureDashboardFolders().catch(() => {
-      setError('기본 폴더 설정에 실패했습니다.')
-    })
+    setCurrentFolder('root')
+    setBreadcrumbs([{ id: 'root', name: '내 드라이브' }])
   }, [session])
 
   function openFolder(folder: DriveFile) {
@@ -114,7 +92,7 @@ export default function DrivePage() {
     const formData = new FormData()
     formData.append('file', file)
 
-    const folderId = currentFolder || dashboardFolders?.uploadsId
+    const folderId = currentFolder
     if (folderId) formData.append('folderId', folderId)
     try {
       const res = await fetch('/api/drive/upload', { method: 'POST', body: formData })
@@ -174,7 +152,7 @@ export default function DrivePage() {
           <h2 className="text-3xl font-black uppercase">Google Drive</h2>
           <p className="text-sm font-bold text-gray-600 mt-1">{session.user?.email} · {filtered.length}개</p>
           <p className="text-xs font-bold text-black mt-1">
-            표시 범위: my dashboard 내부만
+            표시 범위: 내 드라이브 전체
           </p>
         </div>
         <div className="flex gap-2">
