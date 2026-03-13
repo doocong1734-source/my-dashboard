@@ -24,3 +24,26 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.dashboard-theme,
+.dashboard-theme p,
+.dashboard-theme span,
+.dashboard-theme small,
+.dashboard-theme label,
+.dashboard-theme a,
+.dashboard-theme li,
+.dashboard-theme td,
+.dashboard-theme th,
+.dashboard-theme input,
+.dashboard-theme textarea,
+.dashboard-theme select,
+.dashboard-theme button,
+.dashboard-theme h1,
+.dashboard-theme h2,
+.dashboard-theme h3,
+.dashboard-theme h4,
+.dashboard-theme h5,
+.dashboard-theme h6 {
+  color: #000000;
+  font-weight: 700;
+}
