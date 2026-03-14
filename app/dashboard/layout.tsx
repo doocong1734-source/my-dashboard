@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
-import { LayoutDashboard, CalendarDays, BriefcaseBusiness, Settings, HardDrive } from 'lucide-react'
+import { LayoutDashboard, CalendarDays, BriefcaseBusiness, Settings, HardDrive, WandSparkles } from 'lucide-react'
 import { authOptions } from '@/lib/auth'
 
 const navItems = [
@@ -9,6 +9,7 @@ const navItems = [
   { href: '/dashboard/documents', label: '스케줄', icon: CalendarDays },
   { href: '/dashboard/drive', label: 'Google Drive', icon: HardDrive },
   { href: '/dashboard/jobs', label: 'Jobs', icon: BriefcaseBusiness },
+  { href: '/dashboard/skills', label: 'Skills', icon: WandSparkles },
   { href: '/dashboard/settings', label: '설정', icon: Settings },
 ]
 

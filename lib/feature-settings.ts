@@ -4,6 +4,7 @@ export type FeatureSettings = {
   jobsCreateEnabled: boolean
   jobsStatusUpdateEnabled: boolean
   jobsDeleteEnabled: boolean
+  skillDocGenerationEnabled: boolean
 }
 
 export const defaultFeatureSettings: FeatureSettings = {
@@ -12,6 +13,7 @@ export const defaultFeatureSettings: FeatureSettings = {
   jobsCreateEnabled: true,
   jobsStatusUpdateEnabled: true,
   jobsDeleteEnabled: true,
+  skillDocGenerationEnabled: true,
 }
 
 export const featureSettingsStorageKey = 'my-dashboard-feature-settings'

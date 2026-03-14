@@ -5,6 +5,7 @@ Next.js 기반 운영 대시보드입니다. 현재 포함 기능:
 - Google Drive 연동 (my dashboard 하위 폴더 범위 제한)
 - Jobs 관리 (Supabase)
 - 스케줄 캘린더 (Supabase 기반 CRUD)
+- Skill 자동 문서 생성 (템플릿 기반)
 - 기능 토글 설정 (localStorage)
 - 공유 접근 토큰 발급 (scope/만료 지정)
 
@@ -65,6 +66,55 @@ create table if not exists public.schedules (
 );
 ```
 
+### `skills` (선택: 없으면 기본 템플릿 fallback)
+- `id` (text, pk)
+- `name` (text, not null)
+- `category` (text, not null)
+- `input_fields` (jsonb, not null)
+- `output_sections` (jsonb, not null)
+- `prompt_template` (text, not null)
+- `created_at` (timestamptz, default now())
+
+```sql
+create table if not exists public.skills (
+  id text primary key,
+  name text not null,
+  category text not null,
+  input_fields jsonb not null,
+  output_sections jsonb not null,
+  prompt_template text not null,
+  created_at timestamptz not null default now()
+);
+```
+
+### `generated_documents`
+- `id` (uuid, pk, default gen_random_uuid())
+- `skill_id` (text, not null)
+- `title` (text, not null)
+- `input_payload` (jsonb, not null)
+- `generated_content` (text, not null)
+- `status` (text, default 'draft')
+- `created_at` (timestamptz, default now())
+
+```sql
+create table if not exists public.generated_documents (
+  id uuid primary key default gen_random_uuid(),
+  skill_id text not null,
+  title text not null,
+  input_payload jsonb not null,
+  generated_content text not null,
+  status text not null default 'draft',
+  created_at timestamptz not null default now()
+);
+```
+
+### 마이그레이션 파일로 한 번에 적용
+
+`supabase/migrations/20260314_skills_documents.sql` 파일에
+`skills`, `generated_documents` 테이블 생성 + 기본 skill 템플릿 시드가 포함되어 있습니다.
+
+Supabase SQL Editor에서 파일 내용을 실행하면 한 번에 반영됩니다.
+
 ## 4) 주요 API 계약
 
 ### Drive
@@ -81,6 +131,44 @@ create table if not exists public.schedules (
     - `expiresInMinutes?: number` (5~10080)
   - response:
     - `token`, `tokenType`, `scopes`, `expiresAt`
+
+### Skills
+- `GET /api/skills`
+  - db의 `skills` 테이블 조회
+  - 조회 실패/데이터 없음 시 내장 기본 템플릿 fallback
+
+### Documents
+- `POST /api/documents/generate`
+  - body:
+    - `skillId` (string, required)
+    - `title` (string, optional)
+    - `payload` (record<string, string>, required)
+  - response:
+    - `document`, `prompt`, `skill`
+
+- `GET /api/documents`
+  - 생성된 문서 목록 조회 (`generated_documents`)
+
+- `PATCH /api/documents`
+  - body:
+    - `id` (string, required)
+    - `title` (string, required)
+    - `generatedContent` (string, required)
+    - `status` (string, required)
+  - response:
+    - `document`
+
+- `DELETE /api/documents`
+  - body:
+    - `id` (string, required)
+  - response:
+    - `success`
+
+- `POST /api/documents/export`
+  - body:
+    - `id` (string, required)
+  - response:
+    - markdown 파일 다운로드 (`text/markdown`, attachment)
 
 ## 5) 다중 환경/다른 에이전트에서 쉽게 작업하는 방법
 

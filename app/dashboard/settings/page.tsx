@@ -91,6 +91,11 @@ export default function SettingsPage() {
       label: 'Job 삭제',
       description: 'Jobs 페이지에서 작업 삭제를 허용합니다.',
     },
+    {
+      key: 'skillDocGenerationEnabled',
+      label: 'Skill 문서 생성',
+      description: 'Skills 페이지에서 템플릿 기반 자동 문서 생성을 허용합니다.',
+    },
   ]
 
   return (
