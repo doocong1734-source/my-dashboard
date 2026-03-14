@@ -153,8 +153,20 @@ Supabase SQL Editor에서 파일 내용을 실행하면 한 번에 반영됩니�
     - `skillId` (string, required)
     - `title` (string, optional)
     - `payload` (record<string, string>, required)
+    - `obsidian` (optional)
+      - `enabled` (boolean)
+      - `vaultFolder` (string)
+      - `tags` (string[])
+      - `aliases` (string[])
+      - `linkedNotes` (string[])
   - response:
     - `document`, `prompt`, `skill`
+
+### Obsidian 활용
+- Skills 페이지에서 `Obsidian 형식`을 ON 하면 생성 문서에 아래가 자동 반영됩니다.
+  - YAML frontmatter (`title`, `created`, `folder`, `tags`, `aliases`)
+  - 인라인 태그(`#tag`)
+  - 위키링크(`[[노트명]]`) 기반 연결 노트 섹션
 
 - `GET /api/documents`
   - 생성된 문서 목록 조회 (`generated_documents`)
