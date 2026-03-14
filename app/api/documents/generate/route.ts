@@ -7,12 +7,18 @@ import { supabase } from '@/lib/supabase'
 import { buildGeneratedMarkdown, buildPrompt, type ObsidianOptions } from '@/lib/skill-templates'
 import { findSkillById } from '@/lib/skills-store'
 import { ensureDashboardFolders } from '@/lib/drive-folders'
+import { generateSkillDraft } from '@/lib/ai-doc-generator'
 
 type GenerateBody = {
   skillId: string
   title?: string
   payload: Record<string, string>
   obsidian?: ObsidianOptions
+  ai?: {
+    provider?: 'openai' | 'anthropic' | 'gemini' | 'openrouter'
+    model?: string
+    temperature?: number
+  }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -82,6 +88,41 @@ function validateGenerateBody(value: unknown):
     }
   }
 
+  let ai: GenerateBody['ai']
+  if (value.ai !== undefined) {
+    if (!isPlainObject(value.ai)) {
+      return { ok: false, status: 400, error: 'ai must be an object' }
+    }
+
+    const provider = value.ai.provider
+    const model = value.ai.model
+    const temperature = value.ai.temperature
+
+    if (
+      provider !== undefined &&
+      provider !== 'openai' &&
+      provider !== 'anthropic' &&
+      provider !== 'gemini' &&
+      provider !== 'openrouter'
+    ) {
+      return { ok: false, status: 400, error: 'ai.provider must be one of openai|anthropic|gemini|openrouter' }
+    }
+
+    if (model !== undefined && typeof model !== 'string') {
+      return { ok: false, status: 400, error: 'ai.model must be a string' }
+    }
+
+    if (temperature !== undefined && typeof temperature !== 'number') {
+      return { ok: false, status: 400, error: 'ai.temperature must be a number' }
+    }
+
+    ai = {
+      provider,
+      model,
+      temperature,
+    }
+  }
+
   return {
     ok: true,
     body: {
@@ -89,6 +130,7 @@ function validateGenerateBody(value: unknown):
       title: value.title,
       payload,
       obsidian,
+      ai,
     },
   }
 }
@@ -127,7 +169,21 @@ export async function POST(req: NextRequest) {
     }
 
     const prompt = buildPrompt(skill.prompt_template, payload)
-    const generated = buildGeneratedMarkdown(skill.name, skill.output_sections, payload, prompt, body.obsidian)
+    const aiDraft = await generateSkillDraft({
+      skillName: skill.name,
+      sections: skill.output_sections,
+      payload,
+      prompt,
+      ai: body.ai,
+    })
+    const generated = buildGeneratedMarkdown(
+      skill.name,
+      skill.output_sections,
+      payload,
+      prompt,
+      body.obsidian,
+      aiDraft.content
+    )
     const safeTitle = body.title?.trim() || `${skill.name} ${new Date().toLocaleString('ko-KR')}`
 
     const { data, error } = await supabase
@@ -204,6 +260,10 @@ export async function POST(req: NextRequest) {
       source: skillResult.source,
       fallbackReason: skillResult.fallbackReason || null,
       driveUpload,
+      generationMode: aiDraft.mode,
+      generationWarning: aiDraft.warning || null,
+      generationProvider: aiDraft.provider,
+      generationModel: aiDraft.model,
     })
   } catch {
     return NextResponse.json(

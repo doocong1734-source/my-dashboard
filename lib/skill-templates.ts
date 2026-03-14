@@ -167,7 +167,8 @@ export function buildGeneratedMarkdown(
   sections: string[],
   payload: Record<string, string>,
   prompt: string,
-  obsidian?: ObsidianOptions
+  obsidian?: ObsidianOptions,
+  generatedDraft?: string
 ) {
   const lines: string[] = []
 
@@ -234,10 +235,15 @@ export function buildGeneratedMarkdown(
   lines.push('')
   lines.push('## 자동 생성 초안')
   lines.push('')
-  for (const section of sections) {
-    lines.push(`### ${section}`)
-    lines.push('-')
+  if (generatedDraft?.trim()) {
+    lines.push(generatedDraft.trim())
     lines.push('')
+  } else {
+    for (const section of sections) {
+      lines.push(`### ${section}`)
+      lines.push('-')
+      lines.push('')
+    }
   }
   lines.push('## 생성 프롬프트')
   lines.push('```')
