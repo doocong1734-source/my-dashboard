@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { WandSparkles, RefreshCcw, FileText, Download, Save, Trash2 } from 'lucide-react'
 import { useFeatureSettings } from '@/components/feature-settings-provider'
+import { defaultSkillTemplates } from '@/lib/skill-templates'
 
 type SkillTemplate = {
   id: string
@@ -29,6 +30,17 @@ type GenerateResponse = {
   }
   source?: 'database' | 'default'
   fallbackReason?: string | null
+  driveUpload?:
+    | {
+        ok: true
+        file: {
+          id?: string | null
+          name?: string | null
+          webViewLink?: string | null
+          parents?: string[] | null
+        }
+      }
+    | { ok: false; error: string }
 }
 
 type GeneratedDocument = {
@@ -39,6 +51,35 @@ type GeneratedDocument = {
   generated_content: string
   status: string
   created_at: string
+}
+
+const localSkillTemplatesStorageKey = 'my-dashboard-local-skill-templates'
+
+function readLocalSkillTemplates(): SkillTemplate[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(localSkillTemplatesStorageKey)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as SkillTemplate[]
+    if (!Array.isArray(parsed)) return []
+
+    return parsed.filter(
+      item =>
+        typeof item.id === 'string' &&
+        typeof item.name === 'string' &&
+        typeof item.category === 'string' &&
+        typeof item.prompt_template === 'string' &&
+        Array.isArray(item.input_fields) &&
+        Array.isArray(item.output_sections)
+    )
+  } catch {
+    return []
+  }
+}
+
+function writeLocalSkillTemplates(skills: SkillTemplate[]) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(localSkillTemplatesStorageKey, JSON.stringify(skills))
 }
 
 export default function SkillsPage() {
@@ -60,6 +101,17 @@ export default function SkillsPage() {
   const [editContent, setEditContent] = useState('')
   const [savingDocument, setSavingDocument] = useState(false)
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
+  const [driveUploadMessage, setDriveUploadMessage] = useState<string | null>(null)
+  const [showCreateSkillForm, setShowCreateSkillForm] = useState(false)
+  const [creatingSkill, setCreatingSkill] = useState(false)
+  const [newSkill, setNewSkill] = useState({
+    id: '',
+    name: '',
+    category: '',
+    inputFields: 'title,notes',
+    outputSections: '요약,핵심내용',
+    promptTemplate: '',
+  })
 
   const selectedSkill = useMemo(
     () => skills.find(skill => skill.id === selectedSkillId) || null,
@@ -97,14 +149,22 @@ export default function SkillsPage() {
         }
 
         const fetched = (data.skills || []) as SkillTemplate[]
-        setSkills(fetched)
+        const localSkills = readLocalSkillTemplates()
+        const mergedSkills = [...fetched]
+        for (const local of localSkills) {
+          if (!mergedSkills.find(item => item.id === local.id)) {
+            mergedSkills.push(local)
+          }
+        }
+
+        setSkills(mergedSkills)
         setSource((data.source || '') as 'database' | 'default' | '')
         setFallbackReason(typeof data.fallbackReason === 'string' ? data.fallbackReason : null)
 
-        if (fetched.length > 0) {
-          setSelectedSkillId(fetched[0].id)
+        if (mergedSkills.length > 0) {
+          setSelectedSkillId(mergedSkills[0].id)
           const initial: Record<string, string> = {}
-          for (const field of fetched[0].input_fields) {
+          for (const field of mergedSkills[0].input_fields) {
             initial[field] = ''
           }
           setFormData(initial)
@@ -208,8 +268,22 @@ export default function SkillsPage() {
       const created = (data as GenerateResponse).document as GeneratedDocument
       setDocuments(prev => [created, ...prev])
       setSelectedDocumentId(created.id)
+
+      const upload = (data as GenerateResponse).driveUpload
+      if (upload?.ok) {
+        if (upload.file.webViewLink) {
+          setDriveUploadMessage(`Google Drive 저장 완료: ${upload.file.webViewLink}`)
+        } else {
+          setDriveUploadMessage('Google Drive documents 폴더에 저장되었습니다.')
+        }
+      } else if (upload && !upload.ok) {
+        setDriveUploadMessage(`Google Drive 저장 실패: ${upload.error}`)
+      } else {
+        setDriveUploadMessage(null)
+      }
     } catch (e) {
       setResult(null)
+      setDriveUploadMessage(null)
       setError(e instanceof Error ? e.message : '문서 생성에 실패했습니다.')
     } finally {
       setGenerating(false)
@@ -324,6 +398,89 @@ export default function SkillsPage() {
     }
   }
 
+  async function handleCreateSkill() {
+    const id = newSkill.id.trim()
+    const name = newSkill.name.trim()
+    const category = newSkill.category.trim()
+    const promptTemplate = newSkill.promptTemplate.trim()
+    const inputFields = newSkill.inputFields
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean)
+    const outputSections = newSkill.outputSections
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean)
+
+    if (!id || !name || !category || !promptTemplate) {
+      setError('스킬 생성 필수값(id, name, category, promptTemplate)을 입력해 주세요.')
+      return
+    }
+
+    if (inputFields.length === 0 || outputSections.length === 0) {
+      setError('입력필드/출력섹션은 최소 1개 이상 필요합니다.')
+      return
+    }
+
+    if (!/^[a-z0-9_-]+$/i.test(id)) {
+      setError('id는 영문/숫자/하이픈/언더스코어만 가능합니다.')
+      return
+    }
+
+    const createdSkill: SkillTemplate = {
+      id,
+      name,
+      category,
+      input_fields: inputFields,
+      output_sections: outputSections,
+      prompt_template: promptTemplate,
+    }
+
+    setCreatingSkill(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createdSkill),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error || '스킬 저장에 실패했습니다.')
+      }
+
+      setSkills(prev => {
+        const withoutSame = prev.filter(item => item.id !== createdSkill.id)
+        return [createdSkill, ...withoutSame]
+      })
+      setSelectedSkillId(createdSkill.id)
+      setShowCreateSkillForm(false)
+      setNewSkill({
+        id: '',
+        name: '',
+        category: '',
+        inputFields: 'title,notes',
+        outputSections: '요약,핵심내용',
+        promptTemplate: '',
+      })
+    } catch {
+      setSkills(prev => {
+        const withoutSame = prev.filter(item => item.id !== createdSkill.id)
+        const next = [createdSkill, ...withoutSame]
+        const defaultIds = new Set(defaultSkillTemplates.map(item => item.id))
+        const localOnly = next.filter(item => !defaultIds.has(item.id))
+        writeLocalSkillTemplates(localOnly)
+        return next
+      })
+      setSelectedSkillId(createdSkill.id)
+      setShowCreateSkillForm(false)
+      setError('Supabase 저장 실패: 새 스킬을 브라우저 로컬 저장소에 저장했습니다.')
+    } finally {
+      setCreatingSkill(false)
+    }
+  }
+
   function resetForm() {
     if (!selectedSkill) return
     const next: Record<string, string> = {}
@@ -358,6 +515,12 @@ export default function SkillsPage() {
         </div>
       )}
 
+      {driveUploadMessage && (
+        <div className="mb-4 border-4 border-black bg-[#74C0FC] px-4 py-3 font-black text-black break-all">
+          {driveUploadMessage}
+        </div>
+      )}
+
       {loadingSkills ? (
         <div className="border-4 border-black bg-white shadow-[4px_4px_0_black] p-8 text-center">
           <p className="font-black text-black">Skill 목록 로딩 중...</p>
@@ -369,7 +532,15 @@ export default function SkillsPage() {
       ) : (
         <div className="grid grid-cols-5 gap-4">
           <div className="bg-white border-4 border-black shadow-[4px_4px_0_black] p-4">
-            <h3 className="font-black uppercase mb-3">Skill 선택</h3>
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <h3 className="font-black uppercase">Skill 선택</h3>
+              <button
+                onClick={() => setShowCreateSkillForm(prev => !prev)}
+                className="bg-[#FFE500] border-2 border-black px-2 py-1 text-[10px] font-black uppercase text-black"
+              >
+                {showCreateSkillForm ? '닫기' : '새 스킬'}
+              </button>
+            </div>
             {source && (
               <div className="mb-3 border-2 border-black bg-[#f5f0e8] px-2 py-1 text-xs font-black uppercase text-black">
                 Source: {source === 'database' ? 'Supabase' : 'Default Templates'}
@@ -378,6 +549,58 @@ export default function SkillsPage() {
             {source === 'default' && fallbackReason && (
               <div className="mb-3 border-2 border-black bg-[#FFE500] px-2 py-1 text-[10px] font-black uppercase text-black">
                 Fallback reason: {fallbackReason}
+              </div>
+            )}
+            {showCreateSkillForm && (
+              <div className="mb-3 border-2 border-black bg-[#f5f0e8] p-2 space-y-2">
+                <input
+                  type="text"
+                  value={newSkill.id}
+                  onChange={e => setNewSkill(prev => ({ ...prev, id: e.target.value }))}
+                  className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                  placeholder="id (예: my_custom_skill_v1)"
+                />
+                <input
+                  type="text"
+                  value={newSkill.name}
+                  onChange={e => setNewSkill(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                  placeholder="스킬 이름"
+                />
+                <input
+                  type="text"
+                  value={newSkill.category}
+                  onChange={e => setNewSkill(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                  placeholder="카테고리"
+                />
+                <input
+                  type="text"
+                  value={newSkill.inputFields}
+                  onChange={e => setNewSkill(prev => ({ ...prev, inputFields: e.target.value }))}
+                  className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                  placeholder="입력필드 콤마구분 (예: title,notes)"
+                />
+                <input
+                  type="text"
+                  value={newSkill.outputSections}
+                  onChange={e => setNewSkill(prev => ({ ...prev, outputSections: e.target.value }))}
+                  className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                  placeholder="출력섹션 콤마구분 (예: 요약,핵심)"
+                />
+                <textarea
+                  value={newSkill.promptTemplate}
+                  onChange={e => setNewSkill(prev => ({ ...prev, promptTemplate: e.target.value }))}
+                  className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none resize-none h-20 text-black"
+                  placeholder="프롬프트 템플릿"
+                />
+                <button
+                  onClick={handleCreateSkill}
+                  disabled={creatingSkill}
+                  className="w-full bg-[#69DB7C] border-2 border-black px-2 py-1 text-xs font-black uppercase text-black disabled:opacity-50"
+                >
+                  {creatingSkill ? '저장 중...' : '스킬 저장'}
+                </button>
               </div>
             )}
             <div className="space-y-2 max-h-[560px] overflow-auto pr-1">

@@ -1,9 +1,12 @@
 import { getServerSession } from 'next-auth'
 import { NextRequest, NextResponse } from 'next/server'
+import { google } from 'googleapis'
+import { Readable } from 'stream'
 import { authOptions } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { buildGeneratedMarkdown, buildPrompt } from '@/lib/skill-templates'
 import { findSkillById } from '@/lib/skills-store'
+import { ensureDashboardFolders } from '@/lib/drive-folders'
 
 type GenerateBody = {
   skillId: string
@@ -108,12 +111,61 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    let driveUpload:
+      | {
+          ok: true
+          file: {
+            id?: string | null
+            name?: string | null
+            webViewLink?: string | null
+            parents?: string[] | null
+          }
+        }
+      | { ok: false; error: string }
+
+    if (!session.accessToken) {
+      driveUpload = { ok: false, error: 'Google Drive access token is unavailable' }
+    } else {
+      try {
+        const oauth2Client = new google.auth.OAuth2()
+        oauth2Client.setCredentials({ access_token: session.accessToken })
+        const drive = google.drive({ version: 'v3', auth: oauth2Client })
+        const folders = await ensureDashboardFolders(drive)
+
+        const safeName = `${safeTitle.replace(/[\\/:*?"<>|]/g, '_')}.md`
+        const uploadRes = await drive.files.create({
+          requestBody: {
+            name: safeName,
+            parents: [folders.documentsId],
+          },
+          media: {
+            mimeType: 'text/markdown',
+            body: Readable.from(Buffer.from(generated, 'utf-8')),
+          },
+          fields: 'id,name,webViewLink,parents',
+        })
+
+        driveUpload = {
+          ok: true,
+          file: {
+            id: uploadRes.data.id ?? null,
+            name: uploadRes.data.name ?? null,
+            webViewLink: uploadRes.data.webViewLink ?? null,
+            parents: uploadRes.data.parents ?? null,
+          },
+        }
+      } catch {
+        driveUpload = { ok: false, error: 'Failed to upload generated document to Google Drive' }
+      }
+    }
+
     return NextResponse.json({
       document: data,
       prompt,
       skill: { id: skill.id, name: skill.name, category: skill.category },
       source: skillResult.source,
       fallbackReason: skillResult.fallbackReason || null,
+      driveUpload,
     })
   } catch {
     return NextResponse.json(

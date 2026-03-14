@@ -27,6 +27,25 @@ function formatKoreanDate(date: Date) {
 }
 
 const days = ['일', '월', '화', '수', '목', '금', '토']
+const scheduleFallbackStorageKey = 'my-dashboard-local-schedules'
+
+function readLocalSchedules(): ScheduleItem[] {
+  if (typeof window === 'undefined') return []
+
+  try {
+    const raw = window.localStorage.getItem(scheduleFallbackStorageKey)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as ScheduleItem[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeLocalSchedules(items: ScheduleItem[]) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(scheduleFallbackStorageKey, JSON.stringify(items))
+}
 
 export default function DocumentsPage() {
   const { settings } = useFeatureSettings()
@@ -103,9 +122,10 @@ export default function DocumentsPage() {
       if (fetchError) throw fetchError
 
       setItems((data || []) as ScheduleItem[])
-    } catch (e) {
-      setItems([])
-      setError(e instanceof Error ? e.message : '스케줄을 불러오지 못했습니다.')
+    } catch {
+      const localItems = readLocalSchedules()
+      setItems(localItems)
+      setError('Supabase 연결에 실패하여 로컬 저장소 스케줄을 표시합니다.')
     } finally {
       setLoading(false)
     }
@@ -152,8 +172,25 @@ export default function DocumentsPage() {
       setSelectedScheduleId(created.id)
       setForm({ title: '', description: '', time: '09:00' })
       setShowCreate(false)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '스케줄 생성에 실패했습니다.')
+    } catch {
+      const created: ScheduleItem = {
+        id: crypto.randomUUID(),
+        title: form.title.trim(),
+        description: form.description.trim(),
+        date: selectedDate,
+        time: form.time,
+        created_at: new Date().toISOString(),
+      }
+
+      setItems(prev => {
+        const next = [created, ...prev]
+        writeLocalSchedules(next)
+        return next
+      })
+      setSelectedScheduleId(created.id)
+      setForm({ title: '', description: '', time: '09:00' })
+      setShowCreate(false)
+      setError('Supabase 저장 실패: 현재 브라우저 로컬 저장소에 저장되었습니다.')
     } finally {
       setSaving(false)
     }
@@ -180,8 +217,16 @@ export default function DocumentsPage() {
       if (selectedScheduleId === id) {
         setSelectedScheduleId(null)
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '스케줄 삭제에 실패했습니다.')
+    } catch {
+      setItems(prev => {
+        const next = prev.filter(item => item.id !== id)
+        writeLocalSchedules(next)
+        return next
+      })
+      if (selectedScheduleId === id) {
+        setSelectedScheduleId(null)
+      }
+      setError('Supabase 삭제 실패: 로컬 저장소에서만 삭제했습니다.')
     } finally {
       setDeletingId(null)
     }
