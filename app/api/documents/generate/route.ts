@@ -4,7 +4,7 @@ import { google } from 'googleapis'
 import { Readable } from 'stream'
 import { authOptions } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
-import { buildGeneratedMarkdown, buildPrompt } from '@/lib/skill-templates'
+import { buildGeneratedMarkdown, buildPrompt, type ObsidianOptions } from '@/lib/skill-templates'
 import { findSkillById } from '@/lib/skills-store'
 import { ensureDashboardFolders } from '@/lib/drive-folders'
 
@@ -12,6 +12,7 @@ type GenerateBody = {
   skillId: string
   title?: string
   payload: Record<string, string>
+  obsidian?: ObsidianOptions
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -45,12 +46,49 @@ function validateGenerateBody(value: unknown):
     payload[key] = item
   }
 
+  let obsidian: ObsidianOptions | undefined
+  if (value.obsidian !== undefined) {
+    if (!isPlainObject(value.obsidian)) {
+      return { ok: false, status: 400, error: 'obsidian must be an object' }
+    }
+
+    const enabled = value.obsidian.enabled
+    if (typeof enabled !== 'boolean') {
+      return { ok: false, status: 400, error: 'obsidian.enabled must be a boolean' }
+    }
+
+    const parseArray = (v: unknown, key: string) => {
+      if (v === undefined) return undefined
+      if (!Array.isArray(v) || !v.every(item => typeof item === 'string')) {
+        throw new Error(`obsidian.${key} must be a string array`)
+      }
+      return v as string[]
+    }
+
+    try {
+      obsidian = {
+        enabled,
+        vaultFolder: typeof value.obsidian.vaultFolder === 'string' ? value.obsidian.vaultFolder : undefined,
+        tags: parseArray(value.obsidian.tags, 'tags'),
+        aliases: parseArray(value.obsidian.aliases, 'aliases'),
+        linkedNotes: parseArray(value.obsidian.linkedNotes, 'linkedNotes'),
+      }
+    } catch (e) {
+      return {
+        ok: false,
+        status: 400,
+        error: e instanceof Error ? e.message : 'Invalid obsidian options',
+      }
+    }
+  }
+
   return {
     ok: true,
     body: {
       skillId: value.skillId.trim(),
       title: value.title,
       payload,
+      obsidian,
     },
   }
 }
@@ -89,7 +127,7 @@ export async function POST(req: NextRequest) {
     }
 
     const prompt = buildPrompt(skill.prompt_template, payload)
-    const generated = buildGeneratedMarkdown(skill.name, skill.output_sections, payload, prompt)
+    const generated = buildGeneratedMarkdown(skill.name, skill.output_sections, payload, prompt, body.obsidian)
     const safeTitle = body.title?.trim() || `${skill.name} ${new Date().toLocaleString('ko-KR')}`
 
     const { data, error } = await supabase

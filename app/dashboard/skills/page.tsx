@@ -43,6 +43,14 @@ type GenerateResponse = {
     | { ok: false; error: string }
 }
 
+type ObsidianModeOptions = {
+  enabled: boolean
+  vaultFolder: string
+  tagsCsv: string
+  aliasesCsv: string
+  linkedNotesCsv: string
+}
+
 type GeneratedDocument = {
   id: string
   skill_id: string
@@ -111,6 +119,13 @@ export default function SkillsPage() {
     inputFields: 'title,notes',
     outputSections: '요약,핵심내용',
     promptTemplate: '',
+  })
+  const [obsidianOptions, setObsidianOptions] = useState<ObsidianModeOptions>({
+    enabled: false,
+    vaultFolder: 'my dashboard/documents',
+    tagsCsv: 'skill,dashboard',
+    aliasesCsv: '',
+    linkedNotesCsv: '',
   })
 
   const selectedSkill = useMemo(
@@ -250,6 +265,26 @@ export default function SkillsPage() {
           skillId: selectedSkill.id,
           title: docTitle,
           payload: formData,
+          ...(obsidianOptions.enabled
+            ? {
+                obsidian: {
+                  enabled: true,
+                  vaultFolder: obsidianOptions.vaultFolder,
+                  tags: obsidianOptions.tagsCsv
+                    .split(',')
+                    .map(v => v.trim())
+                    .filter(Boolean),
+                  aliases: obsidianOptions.aliasesCsv
+                    .split(',')
+                    .map(v => v.trim())
+                    .filter(Boolean),
+                  linkedNotes: obsidianOptions.linkedNotesCsv
+                    .split(',')
+                    .map(v => v.trim())
+                    .filter(Boolean),
+                },
+              }
+            : {}),
         }),
       })
 
@@ -660,6 +695,100 @@ export default function SkillsPage() {
                       )}
                     </div>
                   ))}
+
+                  <div className="col-span-2 border-4 border-black bg-[#f5f0e8] p-3 mt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black uppercase text-black">Obsidian 형식</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setObsidianOptions(prev => {
+                            const nextEnabled = !prev.enabled
+                            if (!nextEnabled) {
+                              return {
+                                ...prev,
+                                enabled: false,
+                                tagsCsv: '',
+                                aliasesCsv: '',
+                                linkedNotesCsv: '',
+                              }
+                            }
+                            return { ...prev, enabled: true }
+                          })
+                        }}
+                        className={`border-2 border-black px-2 py-1 text-[10px] font-black uppercase ${
+                          obsidianOptions.enabled ? 'bg-[#69DB7C]' : 'bg-white'
+                        }`}
+                      >
+                        {obsidianOptions.enabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+
+                    {obsidianOptions.enabled && (
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div className="col-span-2">
+                          <label className="text-[10px] font-black uppercase block mb-1 text-black">Vault Folder</label>
+                          <input
+                            type="text"
+                            value={obsidianOptions.vaultFolder}
+                            onChange={e =>
+                              setObsidianOptions(prev => ({
+                                ...prev,
+                                vaultFolder: e.target.value,
+                              }))
+                            }
+                            className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                            placeholder="my dashboard/documents"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-[10px] font-black uppercase block mb-1 text-black">Tags (comma)</label>
+                          <input
+                            type="text"
+                            value={obsidianOptions.tagsCsv}
+                            onChange={e =>
+                              setObsidianOptions(prev => ({
+                                ...prev,
+                                tagsCsv: e.target.value,
+                              }))
+                            }
+                            className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                            placeholder="project,meeting,weekly"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase block mb-1 text-black">Aliases (comma)</label>
+                          <input
+                            type="text"
+                            value={obsidianOptions.aliasesCsv}
+                            onChange={e =>
+                              setObsidianOptions(prev => ({
+                                ...prev,
+                                aliasesCsv: e.target.value,
+                              }))
+                            }
+                            className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                            placeholder="회의록,Meeting Note"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase block mb-1 text-black">Linked Notes (comma)</label>
+                          <input
+                            type="text"
+                            value={obsidianOptions.linkedNotesCsv}
+                            onChange={e =>
+                              setObsidianOptions(prev => ({
+                                ...prev,
+                                linkedNotesCsv: e.target.value,
+                              }))
+                            }
+                            className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                            placeholder="Projects/Alpha,People/Team"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex gap-2 mb-4">

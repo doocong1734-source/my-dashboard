@@ -7,6 +7,18 @@ export type SkillTemplate = {
   prompt_template: string
 }
 
+export type ObsidianOptions = {
+  enabled: boolean
+  vaultFolder?: string
+  tags?: string[]
+  aliases?: string[]
+  linkedNotes?: string[]
+}
+
+function sanitizeObsidianValue(value: string) {
+  return value.replace(/[\[\]#|^:%]/g, '').trim()
+}
+
 export const defaultSkillTemplates: SkillTemplate[] = [
   {
     id: 'meeting_minutes_v1',
@@ -154,9 +166,64 @@ export function buildGeneratedMarkdown(
   skillName: string,
   sections: string[],
   payload: Record<string, string>,
-  prompt: string
+  prompt: string,
+  obsidian?: ObsidianOptions
 ) {
   const lines: string[] = []
+
+  if (obsidian?.enabled) {
+    const sanitizedTags = (obsidian.tags || [])
+      .map(tag => sanitizeObsidianValue(tag).replace(/^#/, '').replace(/\s+/g, '-'))
+      .filter(Boolean)
+    const sanitizedAliases = (obsidian.aliases || [])
+      .map(alias => sanitizeObsidianValue(alias))
+      .filter(Boolean)
+    const rawLinks = (obsidian.linkedNotes || []).map(note => note.trim()).filter(Boolean)
+    const sanitizedLinks = rawLinks.map(note => sanitizeObsidianValue(note)).filter(Boolean)
+
+    lines.push('---')
+    lines.push(`title: "${skillName.replace(/"/g, '\\"')}"`)
+    lines.push(`created: "${new Date().toISOString()}"`)
+    const sanitizedFolder = obsidian.vaultFolder ? sanitizeObsidianValue(obsidian.vaultFolder) : ''
+    if (sanitizedFolder) {
+      lines.push(`folder: "${sanitizedFolder.replace(/"/g, '\\"')}"`)
+    }
+    if (sanitizedTags.length > 0) {
+      lines.push('tags:')
+      for (const tag of sanitizedTags) {
+        lines.push(`  - "${tag}"`)
+      }
+    }
+    if (sanitizedAliases.length > 0) {
+      lines.push('aliases:')
+      for (const alias of sanitizedAliases) {
+        lines.push(`  - "${alias.replace(/"/g, '\\"')}"`)
+      }
+    }
+    lines.push('---')
+    lines.push('')
+
+    if (sanitizedTags.length > 0) {
+      lines.push(sanitizedTags.map(tag => `#${tag}`).join(' '))
+      lines.push('')
+    }
+
+    if (rawLinks.length > 0) {
+      lines.push('## 연결 노트')
+      for (let i = 0; i < rawLinks.length; i += 1) {
+        const raw = rawLinks[i]
+        const safe = sanitizedLinks[i] || ''
+        if (!safe) continue
+
+        if (/^https?:\/\//i.test(raw)) {
+          lines.push(`- [${safe}](${raw})`)
+        } else {
+          lines.push(`- [[${safe}]]`)
+        }
+      }
+      lines.push('')
+    }
+  }
 
   lines.push(`# ${skillName}`)
   lines.push('')
