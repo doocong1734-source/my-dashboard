@@ -28,6 +28,13 @@ npm run dev
 - `SHARE_TOKEN_SECRET` (선택, 없으면 NEXTAUTH_SECRET 사용)
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
+- `OPENAI_API_KEY` (Skills AI 본문 생성)
+- `OPENAI_MODEL` (선택, 기본 `gpt-4o-mini`)
+- `AI_PROVIDER` (선택, 기본 `openai`)
+- `AI_MODEL` (선택, provider 기본 모델)
+- `ANTHROPIC_API_KEY` (선택)
+- `GEMINI_API_KEY` (선택)
+- `OPENROUTER_API_KEY` (선택)
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
@@ -167,6 +174,12 @@ Supabase SQL Editor에서 파일 내용을 실행하면 한 번에 반영됩니�
   - YAML frontmatter (`title`, `created`, `folder`, `tags`, `aliases`)
   - 인라인 태그(`#tag`)
   - 위키링크(`[[노트명]]`) 기반 연결 노트 섹션
+
+### Skills AI 본문 생성
+- `/api/documents/generate`는 문서 초안 본문을 AI로 생성합니다.
+- Skills 화면에서 provider/model/temperature를 선택할 수 있습니다.
+- 지원 provider: `openai`, `anthropic`, `gemini`, `openrouter`
+- 선택한 provider의 API 키가 없거나 AI 요청 실패 시, fallback 본문(입력값 기반)으로 자동 생성됩니다.
 
 - `GET /api/documents`
   - 생성된 문서 목록 조회 (`generated_documents`)

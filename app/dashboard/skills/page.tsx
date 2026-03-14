@@ -41,6 +41,10 @@ type GenerateResponse = {
         }
       }
     | { ok: false; error: string }
+  generationMode?: 'ai' | 'fallback'
+  generationWarning?: string | null
+  generationProvider?: 'openai' | 'anthropic' | 'gemini' | 'openrouter'
+  generationModel?: string
 }
 
 type ObsidianModeOptions = {
@@ -49,6 +53,19 @@ type ObsidianModeOptions = {
   tagsCsv: string
   aliasesCsv: string
   linkedNotesCsv: string
+}
+
+type AiOptions = {
+  provider: 'openai' | 'anthropic' | 'gemini' | 'openrouter'
+  model: string
+  temperature: string
+}
+
+const providerModelPresets: Record<AiOptions['provider'], string[]> = {
+  openai: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1'],
+  anthropic: ['claude-3-5-haiku-latest', 'claude-3-7-sonnet-latest'],
+  gemini: ['gemini-1.5-flash', 'gemini-1.5-pro'],
+  openrouter: ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet'],
 }
 
 type GeneratedDocument = {
@@ -110,6 +127,7 @@ export default function SkillsPage() {
   const [savingDocument, setSavingDocument] = useState(false)
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
   const [driveUploadMessage, setDriveUploadMessage] = useState<string | null>(null)
+  const [aiGenerationMessage, setAiGenerationMessage] = useState<string | null>(null)
   const [showCreateSkillForm, setShowCreateSkillForm] = useState(false)
   const [creatingSkill, setCreatingSkill] = useState(false)
   const [newSkill, setNewSkill] = useState({
@@ -126,6 +144,11 @@ export default function SkillsPage() {
     tagsCsv: 'skill,dashboard',
     aliasesCsv: '',
     linkedNotesCsv: '',
+  })
+  const [aiOptions, setAiOptions] = useState<AiOptions>({
+    provider: 'openai',
+    model: providerModelPresets.openai[0],
+    temperature: '0.4',
   })
 
   const selectedSkill = useMemo(
@@ -265,6 +288,11 @@ export default function SkillsPage() {
           skillId: selectedSkill.id,
           title: docTitle,
           payload: formData,
+          ai: {
+            provider: aiOptions.provider,
+            model: aiOptions.model,
+            temperature: Number(aiOptions.temperature),
+          },
           ...(obsidianOptions.enabled
             ? {
                 obsidian: {
@@ -316,9 +344,23 @@ export default function SkillsPage() {
       } else {
         setDriveUploadMessage(null)
       }
+
+      if ((data as GenerateResponse).generationMode === 'ai') {
+        const provider = (data as GenerateResponse).generationProvider || aiOptions.provider
+        const model = (data as GenerateResponse).generationModel || aiOptions.model
+        setAiGenerationMessage(`AI 본문 생성 완료 (${provider} / ${model})`)
+      } else if ((data as GenerateResponse).generationMode === 'fallback') {
+        setAiGenerationMessage(
+          (data as GenerateResponse).generationWarning ||
+            'AI 미설정으로 fallback 본문이 생성되었습니다. OPENAI_API_KEY를 설정해 주세요.'
+        )
+      } else {
+        setAiGenerationMessage(null)
+      }
     } catch (e) {
       setResult(null)
       setDriveUploadMessage(null)
+      setAiGenerationMessage(null)
       setError(e instanceof Error ? e.message : '문서 생성에 실패했습니다.')
     } finally {
       setGenerating(false)
@@ -556,6 +598,12 @@ export default function SkillsPage() {
         </div>
       )}
 
+      {aiGenerationMessage && (
+        <div className="mb-4 border-4 border-black bg-[#B2F2BB] px-4 py-3 font-black text-black break-all">
+          {aiGenerationMessage}
+        </div>
+      )}
+
       {loadingSkills ? (
         <div className="border-4 border-black bg-white shadow-[4px_4px_0_black] p-8 text-center">
           <p className="font-black text-black">Skill 목록 로딩 중...</p>
@@ -695,6 +743,68 @@ export default function SkillsPage() {
                       )}
                     </div>
                   ))}
+
+                  <div className="col-span-2 border-4 border-black bg-[#f5f0e8] p-3 mt-1">
+                    <p className="text-xs font-black uppercase text-black mb-2">AI 모델 설정</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-[10px] font-black uppercase block mb-1 text-black">Provider</label>
+                        <select
+                          value={aiOptions.provider}
+                          onChange={e => {
+                            const nextProvider = e.target.value as AiOptions['provider']
+                            setAiOptions(prev => ({
+                              ...prev,
+                              provider: nextProvider,
+                              model: providerModelPresets[nextProvider][0],
+                            }))
+                          }}
+                          className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                        >
+                          <option value="openai">OpenAI</option>
+                          <option value="anthropic">Anthropic</option>
+                          <option value="gemini">Gemini</option>
+                          <option value="openrouter">OpenRouter</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase block mb-1 text-black">Model</label>
+                        <select
+                          value={aiOptions.model}
+                          onChange={e =>
+                            setAiOptions(prev => ({
+                              ...prev,
+                              model: e.target.value,
+                            }))
+                          }
+                          className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                        >
+                          {providerModelPresets[aiOptions.provider].map(model => (
+                            <option key={model} value={model}>
+                              {model}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase block mb-1 text-black">Temperature</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="1"
+                          step="0.1"
+                          value={aiOptions.temperature}
+                          onChange={e =>
+                            setAiOptions(prev => ({
+                              ...prev,
+                              temperature: e.target.value,
+                            }))
+                          }
+                          className="w-full border-2 border-black px-2 py-1 text-xs font-bold bg-white outline-none text-black"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="col-span-2 border-4 border-black bg-[#f5f0e8] p-3 mt-1">
                     <div className="flex items-center justify-between">
