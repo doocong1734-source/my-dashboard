@@ -31,6 +31,16 @@ npm run dev
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
+### Google OAuth redirect_uri 설정 (redirect_uri_mismatch 방지)
+
+Google Cloud Console > OAuth 2.0 Client(웹) > Authorized redirect URIs 에 아래를 모두 등록하세요.
+
+- 로컬: `http://localhost:3000/api/auth/callback/google`
+- 운영(메인): `https://<your-main-domain>/api/auth/callback/google`
+- Vercel 도메인 사용 시: `https://<your-vercel-domain>/api/auth/callback/google`
+
+앱의 `NEXTAUTH_URL`은 현재 접속 도메인과 동일해야 하며, 위 URI들과 정확히 일치해야 합니다.
+
 ## 3) Supabase 스키마 (필수)
 
 아래 테이블이 필요합니다.
