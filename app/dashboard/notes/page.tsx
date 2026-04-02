@@ -1,0 +1,839 @@
+'use client';
+
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import {
+  Loader2,
+  Plus,
+  Search,
+  Bold,
+  Italic,
+  Code,
+  FileCode,
+  Heading1,
+  Heading2,
+  Heading3,
+  Link as LinkIcon,
+  CheckSquare,
+  Minus,
+  Image as ImageIcon,
+  Save,
+  FileText,
+  Clock,
+  Hash,
+  List,
+  X,
+  Trash2,
+  File,
+  ChevronRight
+} from 'lucide-react';
+import 'highlight.js/styles/github.css';
+
+interface DriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime?: string;
+  webContentLink?: string;
+}
+
+interface Frontmatter {
+  tags: string[];
+  title?: string;
+  [key: string]: unknown;
+}
+
+interface OutlineItem {
+  level: number;
+  text: string;
+  id: string;
+}
+
+const parseFrontmatter = (content: string): { frontmatter: Frontmatter; body: string } => {
+  const frontmatterRegex = /^---\n([\s\S]*?)\n---\n/;
+  const match = content.match(frontmatterRegex);
+
+  if (!match) {
+    return { frontmatter: { tags: [] }, body: content };
+  }
+
+  const fmString = match[1];
+  const body = content.slice(match[0].length);
+  const frontmatter: Frontmatter = { tags: [] };
+
+  const lines = fmString.split('\n');
+  for (const line of lines) {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex === -1) continue;
+
+    const key = line.slice(0, colonIndex).trim();
+    let value = line.slice(colonIndex + 1).trim();
+
+    if (key === 'tags') {
+      const tagMatch = value.match(/\[(.*)\]/);
+      if (tagMatch) {
+        frontmatter.tags = tagMatch[1].split(',').map((t: string) => t.trim().replace(/['"]/g, ''));
+      }
+    } else {
+      (frontmatter as Record<string, unknown>)[key] = value.replace(/['"]/g, '');
+    }
+  }
+
+  return { frontmatter, body };
+};
+
+const extractHashTags = (content: string): string[] => {
+  const hashtagRegex = /#([a-zA-Z0-9_-]+)/g;
+  const tags: string[] = [];
+  let match;
+  while ((match = hashtagRegex.exec(content)) !== null) {
+    const tag = match[1].toLowerCase();
+    if (!tags.includes(tag) && tag.length > 1) {
+      tags.push(tag);
+    }
+  }
+  return tags;
+};
+
+const extractOutline = (content: string): OutlineItem[] => {
+  const headingRegex = /^(#{1,3})\s+(.+)$/gm;
+  const outline: OutlineItem[] = [];
+  let match;
+  const body = content.replace(/^---[\s\S]*?---\n/, '');
+
+  while ((match = headingRegex.exec(body)) !== null) {
+    const level = match[1].length;
+    const text = match[2].trim();
+    const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    outline.push({ level, text, id });
+  }
+
+  return outline;
+};
+
+const countWords = (text: string): number => {
+  const cleanText = text.replace(/```[\s\S]*?```/g, '').replace(/[#*`_~\[\]]/g, ' ');
+  const words = cleanText.split(/\s+/).filter((w: string) => w.length > 0);
+  return words.length;
+};
+
+const countCharacters = (text: string): number => {
+  return text.replace(/\s/g, '').length;
+};
+
+export default function NotesPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  const [files, setFiles] = useState<DriveFile[]>([]);
+  const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null);
+  const [content, setContent] = useState('');
+  const [originalContent, setOriginalContent] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
+  const [frontmatter, setFrontmatter] = useState<Frontmatter>({ tags: [] });
+  const [outline, setOutline] = useState<OutlineItem[]>([]);
+  const [syncScroll, setSyncScroll] = useState(true);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const outlineRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin');
+    }
+  }, [status, router]);
+
+  const fetchFiles = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/drive/files');
+      if (!response.ok) {
+        throw new Error('Failed to fetch files');
+      }
+      const data = await response.json();
+      const mdFiles = (data.files || []).filter(
+        (file: DriveFile) => file.name.endsWith('.md')
+      );
+      setFiles(mdFiles);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load files');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (session) {
+      fetchFiles();
+    }
+  }, [session, fetchFiles]);
+
+  const fetchFileContent = useCallback(async (fileId: string) => {
+    setIsLoadingContent(true);
+    try {
+      const response = await fetch(`/api/drive/content?fileId=${fileId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch content');
+      }
+      const data = await response.json();
+      const fileContent = data.content || '';
+      setContent(fileContent);
+      setOriginalContent(fileContent);
+      setIsDirty(false);
+
+      const { frontmatter: fm } = parseFrontmatter(fileContent);
+      const hashTags = extractHashTags(fileContent);
+      setFrontmatter({ ...fm, tags: fm.tags.length > 0 ? fm.tags : hashTags });
+      setOutline(extractOutline(fileContent));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load content');
+    } finally {
+      setIsLoadingContent(false);
+    }
+  }, []);
+
+  const handleSelectFile = useCallback(
+    (file: DriveFile) => {
+      if (isDirty && selectedFile) {
+        if (confirm('You have unsaved changes. Discard them?')) {
+          setSelectedFile(file);
+          fetchFileContent(file.id);
+        }
+      } else {
+        setSelectedFile(file);
+        fetchFileContent(file.id);
+      }
+    },
+    [isDirty, selectedFile, fetchFileContent]
+  );
+
+  const handleCreateFile = async () => {
+    const fileName = prompt('Enter note name:', 'Untitled');
+    if (!fileName) return;
+
+    const fullName = fileName.endsWith('.md') ? fileName : `${fileName}.md`;
+
+    try {
+      const blob = new Blob([''], { type: 'text/markdown' });
+      const formData = new FormData();
+      formData.append('file', blob, fullName);
+      formData.append('mimeType', 'text/markdown');
+
+      const response = await fetch('/api/drive/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create file');
+      }
+
+      await fetchFiles();
+      const data = await response.json();
+      if (data.file) {
+        setSelectedFile(data.file);
+        setContent('');
+        setOriginalContent('');
+        setIsDirty(false);
+        setFrontmatter({ tags: [] });
+        setOutline([]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create file');
+    }
+  };
+
+  const handleSave = useCallback(async () => {
+    if (!selectedFile || !isDirty) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/drive/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileId: selectedFile.id,
+          content,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save');
+      }
+
+      setOriginalContent(content);
+      setIsDirty(false);
+      setLastSaved(new Date());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedFile, isDirty, content]);
+
+  const handleDelete = async () => {
+    if (!selectedFile) return;
+    if (!confirm(`Delete "${selectedFile.name}"?`)) return;
+
+    try {
+      const response = await fetch('/api/drive/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: selectedFile.id }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete');
+      }
+
+      setSelectedFile(null);
+      setContent('');
+      setOriginalContent('');
+      setIsDirty(false);
+      setFrontmatter({ tags: [] });
+      setOutline([]);
+      await fetchFiles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete');
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSave]);
+
+  useEffect(() => {
+    setIsDirty(content !== originalContent);
+  }, [content, originalContent]);
+
+  const filteredFiles = useMemo(() => {
+    if (!searchQuery) return files;
+    const query = searchQuery.toLowerCase();
+    return files.filter((file) => file.name.toLowerCase().includes(query));
+  }, [files, searchQuery]);
+
+  const insertText = useCallback(
+    (before: string, after: string = '', placeholder: string = '') => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const selectedText = content.substring(start, end) || placeholder;
+      const newText =
+        content.substring(0, start) +
+        before +
+        selectedText +
+        after +
+        content.substring(end);
+
+      setContent(newText);
+
+      setTimeout(() => {
+        textarea.focus();
+        const newCursorPos = start + before.length + selectedText.length;
+        textarea.setSelectionRange(
+          start + before.length,
+          newCursorPos
+        );
+      }, 0);
+    },
+    [content]
+  );
+
+  const handleToolbarAction = useCallback(
+    (action: string) => {
+      switch (action) {
+        case 'bold':
+          insertText('**', '**', 'bold text');
+          break;
+        case 'italic':
+          insertText('*', '*', 'italic text');
+          break;
+        case 'code':
+          insertText('`', '`', 'code');
+          break;
+        case 'codeblock':
+          insertText('```\n', '\n```', 'code here');
+          break;
+        case 'h1':
+          insertAtLineStart('# ');
+          break;
+        case 'h2':
+          insertAtLineStart('## ');
+          break;
+        case 'h3':
+          insertAtLineStart('### ');
+          break;
+        case 'link':
+          insertText('[', '](url)', 'link text');
+          break;
+        case 'checkbox':
+          insertAtLineStart('- [ ] ');
+          break;
+        case 'divider':
+          insertText('\n---\n');
+          break;
+        case 'image':
+          insertText('![', '](url)', 'alt text');
+          break;
+      }
+    },
+    [insertText]
+  );
+
+  const insertAtLineStart = useCallback(
+    (prefix: string) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const start = textarea.selectionStart;
+      const lineStart = content.lastIndexOf('\n', start - 1) + 1;
+      const newText =
+        content.substring(0, lineStart) + prefix + content.substring(lineStart);
+
+      setContent(newText);
+    },
+    [content]
+  );
+
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLTextAreaElement> | React.UIEvent<HTMLDivElement>) => {
+      if (!syncScroll) return;
+
+      const target = e.currentTarget;
+      const scrollPercentage = target.scrollTop / (target.scrollHeight - target.clientHeight);
+
+      if (target === textareaRef.current && previewRef.current) {
+        previewRef.current.scrollTop =
+          scrollPercentage * (previewRef.current.scrollHeight - previewRef.current.clientHeight);
+      }
+    },
+    [syncScroll]
+  );
+
+  const scrollToHeading = (id: string) => {
+    const element = outlineRefs.current[id];
+    if (element && previewRef.current) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const wordCount = useMemo(() => countWords(content), [content]);
+  const charCount = useMemo(() => countCharacters(content), [content]);
+
+  if (status === 'loading') {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white">
+        <Loader2 className="h-12 w-12 animate-spin text-black" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
+
+  return (
+    <div className="flex h-screen flex-col bg-white">
+      {/* Header */}
+      <header className="flex shrink-0 items-center justify-between border-b-4 border-black bg-[#FFE500] p-4">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-black uppercase tracking-tight text-black">
+            Notes
+          </h1>
+          <button
+            onClick={handleCreateFile}
+            className="flex items-center gap-2 border-4 border-black bg-black px-4 py-2 font-black text-white shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none"
+          >
+            <Plus className="h-4 w-4" />
+            New Note
+          </button>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
+          <input
+            type="text"
+            placeholder="Search notes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-80 border-4 border-black py-2 pl-10 pr-4 font-medium shadow-[4px_4px_0_black] placeholder:text-gray-400 focus:outline-none focus:ring-0"
+          />
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Panel - File List */}
+        <aside className="w-60 shrink-0 border-r-4 border-black bg-gray-50">
+          <div className="flex h-full flex-col">
+            <div className="border-b-4 border-black bg-gray-100 p-3">
+              <h2 className="text-sm font-black uppercase tracking-wide text-black">
+                Files ({filteredFiles.length})
+              </h2>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {isLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-black" />
+                </div>
+              ) : error ? (
+                <div className="p-4">
+                  <div className="rounded-lg border-4 border-red-500 bg-red-100 p-3">
+                    <p className="text-sm font-bold text-red-700">{error}</p>
+                    <button
+                      onClick={fetchFiles}
+                      className="mt-2 text-xs font-bold text-red-600 underline"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              ) : filteredFiles.length === 0 ? (
+                <div className="p-4 text-center">
+                  <File className="mx-auto h-12 w-12 text-gray-300" />
+                  <p className="mt-2 text-sm font-medium text-gray-500">
+                    {searchQuery ? 'No files found' : 'No notes yet'}
+                  </p>
+                </div>
+              ) : (
+                <ul className="p-2">
+                  {filteredFiles.map((file) => (
+                    <li key={file.id}>
+                      <button
+                        onClick={() => handleSelectFile(file)}
+                        className={`mb-1 flex w-full items-start gap-2 border-4 p-3 text-left transition-all ${
+                          selectedFile?.id === file.id
+                            ? 'border-black bg-[#FFE500] shadow-[2px_2px_0_black]'
+                            : 'border-transparent bg-white shadow-[2px_2px_0_black] hover:border-black'
+                        }`}
+                      >
+                        <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#B197FC]" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-black">
+                            {file.name.replace('.md', '')}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {formatDate(file.modifiedTime)}
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        {/* Center Panel - Editor */}
+        <main className="flex flex-1 flex-col overflow-hidden">
+          {selectedFile ? (
+            <>
+              {/* Toolbar */}
+              <div className="shrink-0 border-b-4 border-black bg-gray-100 p-2">
+                <div className="flex flex-wrap items-center gap-1">
+                  <button
+                    onClick={() => handleToolbarAction('bold')}
+                    className="rounded border-2 border-black bg-white p-2 font-bold shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Bold (Ctrl+B)"
+                  >
+                    <Bold className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToolbarAction('italic')}
+                    className="rounded border-2 border-black bg-white p-2 font-bold italic shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Italic (Ctrl+I)"
+                  >
+                    <Italic className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToolbarAction('code')}
+                    className="rounded border-2 border-black bg-white p-2 font-mono text-sm shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Inline Code"
+                  >
+                    <Code className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToolbarAction('codeblock')}
+                    className="rounded border-2 border-black bg-white p-2 shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Code Block"
+                  >
+                    <FileCode className="h-4 w-4" />
+                  </button>
+
+                  <div className="mx-2 h-6 w-px bg-black" />
+
+                  <button
+                    onClick={() => handleToolbarAction('h1')}
+                    className="rounded border-2 border-black bg-white p-2 font-bold shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Heading 1"
+                  >
+                    <Heading1 className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToolbarAction('h2')}
+                    className="rounded border-2 border-black bg-white p-2 font-bold shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Heading 2"
+                  >
+                    <Heading2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToolbarAction('h3')}
+                    className="rounded border-2 border-black bg-white p-2 font-bold shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Heading 3"
+                  >
+                    <Heading3 className="h-4 w-4" />
+                  </button>
+
+                  <div className="mx-2 h-6 w-px bg-black" />
+
+                  <button
+                    onClick={() => handleToolbarAction('link')}
+                    className="rounded border-2 border-black bg-white p-2 shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Insert Link"
+                  >
+                    <LinkIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToolbarAction('image')}
+                    className="rounded border-2 border-black bg-white p-2 shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Insert Image"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToolbarAction('checkbox')}
+                    className="rounded border-2 border-black bg-white p-2 shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Checkbox"
+                  >
+                    <CheckSquare className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToolbarAction('divider')}
+                    className="rounded border-2 border-black bg-white p-2 shadow-[2px_2px_0_black] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_black] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    title="Horizontal Rule"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+
+                  <div className="ml-auto flex items-center gap-2">
+                    {/* View Toggle */}
+                    <div className="flex rounded border-2 border-black shadow-[2px_2px_0_black]">
+                      <button
+                        onClick={() => setActiveTab('edit')}
+                        className={`px-3 py-1 text-sm font-bold transition-all ${
+                          activeTab === 'edit'
+                            ? 'bg-black text-white'
+                            : 'bg-white text-black hover:bg-gray-100'
+                        }`}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('preview')}
+                        className={`px-3 py-1 text-sm font-bold transition-all ${
+                          activeTab === 'preview'
+                            ? 'bg-black text-white'
+                            : 'bg-white text-black hover:bg-gray-100'
+                        }`}
+                      >
+                        Preview
+                      </button>
+                    </div>
+
+                    {/* Save Status */}
+                    <span className="text-xs font-bold text-gray-500">
+                      {isDirty ? (
+                        <span className="text-orange-600">수정됨</span>
+                      ) : (
+                        <span className="text-green-600">저장됨</span>
+                      )}
+                    </span>
+
+                    {/* Save Button */}
+                    <button
+                      onClick={handleSave}
+                      disabled={!isDirty || isSaving}
+                      className={`flex items-center gap-2 border-4 px-4 py-2 font-black transition-all ${
+                        isDirty
+                          ? 'border-black bg-[#69DB7C] text-black shadow-[4px_4px_0_black] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none'
+                          : 'border-gray-300 bg-gray-100 text-gray-400'
+                      }`}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                      Save
+                    </button>
+
+                    {/* Delete Button */}
+                    <button
+                      onClick={handleDelete}
+                      className="rounded border-4 border-red-500 bg-red-100 p-2 text-red-600 shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none"
+                      title="Delete Note"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Editor Area */}
+              <div className="flex flex-1 overflow-hidden">
+                {activeTab === 'edit' ? (
+                  <div className="flex h-full w-full">
+                    {/* Textarea */}
+                    <div className="flex-1 border-r-4 border-black">
+                      <textarea
+                        ref={textareaRef}
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        onScroll={handleScroll}
+                        placeholder="Start writing your note..."
+                        className="h-full w-full resize-none border-0 p-4 font-mono text-sm outline-none"
+                        spellCheck={false}
+                      />
+                    </div>
+
+                    {/* Preview */}
+                    <div
+                      ref={previewRef}
+                      className="h-full flex-1 overflow-y-auto bg-white p-4"
+                      onScroll={handleScroll}
+                    >
+                      <div className="prose max-w-none">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeHighlight]}
+                        >
+                          {content}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-full w-full overflow-y-auto bg-white p-6">
+                    <div className="prose max-w-none rounded-lg border-4 border-black p-6 shadow-[4px_4px_0_black]">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight]}
+                      >
+                        {content}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer - Character Count */}
+              <div className="shrink-0 border-t-4 border-black bg-gray-100 p-2">
+                <div className="flex items-center justify-between text-xs font-bold text-gray-600">
+                  <span>{selectedFile.name}</span>
+                  <span>
+                    {wordCount} words | {charCount} chars | {content.length} total
+                  </span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <div className="text-center">
+                <FileText className="mx-auto h-24 w-24 text-gray-200" />
+                <h2 className="mt-4 text-xl font-bold text-gray-400">
+                  Select a note to start editing
+                </h2>
+                <p className="mt-2 text-sm text-gray-400">
+                  Or create a new note to get started
+                </p>
+                <button
+                  onClick={handleCreateFile}
+                  className="mt-6 flex items-center gap-2 border-4 border-black bg-[#FFE500] px-6 py-3 font-black text-black shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none"
+                >
+                  <Plus className="h-5 w-5" />
+                  New Note
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* Right Panel - Metadata */}
+        <aside className="w-56 shrink-0 border-l-4 border-black bg-gray-50">
+          <div className="flex h-full flex-col">
+            <div className="border-b-4 border-black bg-gray-100 p-3">
+              <h2 className="text-sm font-black uppercase tracking-wide text-black">
+                Metadata
+              </h2>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3">
+              {selectedFile ? (
+                <div className="space-y-4">
+                  {/* Tags */}
+                  <div>
+                    <div className="mb-2 flex items-center gap-2">
+                      <Hash className="h-4 w-4 text-[#B197FC]" />
+                      <h3 className="text-xs font-black uppercase tracking-wide text-gray-600">
+                        Tags
+                      </h3>
+                    </div>
+                    {frontmatter.tags && frontmatter.tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {frontmatter.tags.map((tag, index) => (
+                          <span
+                            key={index}
+                            className="rounded border-2 border-black bg-[#B197FC] px-2 py-0.5 text-xs font-bold text-black"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400">No tags found</p>
+                    )}
+                  </div>
+
+                  {/* Stats */}
+                  <div>
+                    <div className="mb-2 flex items-center gap-2">
+                      <List className="h-4 w-4 text-[#B197FC]" />
+                      <h3 className="text-xs font-black uppercase tracking-wide text-gray-600">
+                        Statistics
