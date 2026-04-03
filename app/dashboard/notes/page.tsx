@@ -147,6 +147,9 @@ export default function NotesPage() {
   const router = useRouter();
 
   const [files, setFiles] = useState<DriveFile[]>([]);
+  const [folders, setFolders] = useState<DriveFile[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [folderPath, setFolderPath] = useState<{id: string; name: string}[]>([]);
   const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null);
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
@@ -209,10 +212,9 @@ export default function NotesPage() {
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch files');
       const data = await response.json();
-      const mdFiles = (data.files || []).filter(
-        (file: DriveFile) => file.name.endsWith('.md')
-      );
-      setFiles(mdFiles);
+      const all: DriveFile[] = data.files || [];
+      setFolders(all.filter(f => f.mimeType === 'application/vnd.google-apps.folder'));
+      setFiles(all.filter(f => f.name.endsWith('.md')));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load files');
     } finally {
@@ -231,7 +233,11 @@ export default function NotesPage() {
           (f: DriveFile) => f.mimeType === 'application/vnd.google-apps.folder' && f.name.toLowerCase() === 'obsidianvault'
         );
         const fid = vaultFolder?.id ?? undefined;
-        if (fid) setVaultFolderId(fid);
+        if (fid) {
+          setVaultFolderId(fid);
+          setCurrentFolderId(fid);
+          setFolderPath([{ id: fid, name: vaultFolder!.name }]);
+        }
         fetchFiles(fid);
 
         const qs = fid ? `?folderId=${fid}` : '';
@@ -702,6 +708,40 @@ export default function NotesPage() {
               </h2>
             </div>
 
+            {/* Breadcrumb */}
+            {folderPath.length > 0 && (
+              <div className="flex items-center gap-1 border-b-2 border-black bg-white px-2 py-1.5 overflow-x-auto">
+                <button
+                  onClick={() => {
+                    const vid = vaultFolderId ?? undefined;
+                    setCurrentFolderId(vid ?? null);
+                    setFolderPath(vid ? [{ id: vid, name: folderPath[0].name }] : []);
+                    fetchFiles(vid);
+                  }}
+                  className="text-xs font-bold text-gray-500 hover:text-black shrink-0"
+                >
+                  ~
+                </button>
+                {folderPath.slice(1).map((p, i) => (
+                  <span key={p.id} className="flex items-center gap-1 shrink-0">
+                    <ChevronRight className="h-3 w-3 text-gray-400" />
+                    <button
+                      onClick={() => {
+                        const idx = folderPath.findIndex(x => x.id === p.id);
+                        const newPath = folderPath.slice(0, idx + 1);
+                        setFolderPath(newPath);
+                        setCurrentFolderId(p.id);
+                        fetchFiles(p.id);
+                      }}
+                      className="text-xs font-bold text-gray-500 hover:text-black max-w-[60px] truncate"
+                    >
+                      {p.name}
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto">
               {isLoading ? (
                 <div className="flex items-center justify-center p-8">
@@ -719,37 +759,56 @@ export default function NotesPage() {
                     </button>
                   </div>
                 </div>
-              ) : filteredFiles.length === 0 ? (
-                <div className="p-4 text-center">
-                  <File className="mx-auto h-12 w-12 text-gray-300" />
-                  <p className="mt-2 text-sm font-medium text-gray-500">
-                    {searchQuery ? 'No files found' : 'No notes yet'}
-                  </p>
-                </div>
               ) : (
                 <ul className="p-2">
-                  {filteredFiles.map((file) => (
-                    <li key={file.id}>
+                  {/* Folders first */}
+                  {folders.map((folder) => (
+                    <li key={folder.id}>
                       <button
-                        onClick={() => handleSelectFile(file)}
-                        className={`mb-1 flex w-full items-start gap-2 border-4 p-3 text-left transition-all ${
-                          selectedFile?.id === file.id
-                            ? 'border-black bg-[#FFE500] shadow-[2px_2px_0_black]'
-                            : 'border-transparent bg-white shadow-[2px_2px_0_black] hover:border-black'
-                        }`}
+                        onClick={() => {
+                          setCurrentFolderId(folder.id);
+                          setFolderPath(prev => [...prev, { id: folder.id, name: folder.name }]);
+                          fetchFiles(folder.id);
+                        }}
+                        className="mb-1 flex w-full items-center gap-2 border-2 border-transparent bg-gray-100 px-3 py-2 text-left hover:border-black hover:bg-[#FFE500] transition-all"
                       >
-                        <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#B197FC]" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-black">
-                            {file.name.replace('.md', '')}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {formatDate(file.modifiedTime)}
-                          </p>
-                        </div>
+                        <ChevronRight className="h-3 w-3 shrink-0 text-gray-500" />
+                        <span className="truncate text-sm font-bold text-black">{folder.name}</span>
                       </button>
                     </li>
                   ))}
+                  {/* .md files */}
+                  {filteredFiles.length === 0 && folders.length === 0 ? (
+                    <li className="p-4 text-center">
+                      <File className="mx-auto h-12 w-12 text-gray-300" />
+                      <p className="mt-2 text-sm font-medium text-gray-500">
+                        {searchQuery ? 'No files found' : 'No notes yet'}
+                      </p>
+                    </li>
+                  ) : (
+                    filteredFiles.map((file) => (
+                      <li key={file.id}>
+                        <button
+                          onClick={() => handleSelectFile(file)}
+                          className={`mb-1 flex w-full items-start gap-2 border-4 p-3 text-left transition-all ${
+                            selectedFile?.id === file.id
+                              ? 'border-black bg-[#FFE500] shadow-[2px_2px_0_black]'
+                              : 'border-transparent bg-white shadow-[2px_2px_0_black] hover:border-black'
+                          }`}
+                        >
+                          <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#B197FC]" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-black">
+                              {file.name.replace('.md', '')}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {formatDate(file.modifiedTime)}
+                            </p>
+                          </div>
+                        </button>
+                      </li>
+                    ))
+                  )}
                 </ul>
               )}
             </div>
