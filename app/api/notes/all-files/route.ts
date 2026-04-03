@@ -16,11 +16,15 @@ export async function GET(req: NextRequest) {
     oauth2Client.setCredentials({ access_token: auth.accessToken })
     const drive = google.drive({ version: 'v3', auth: oauth2Client })
 
-    const mdFiles: { id: string; name: string; mimeType: string; modifiedTime?: string }[] = []
-    const folderQueue: string[] = [folderId]
+    const allFiles: { id: string; name: string; mimeType: string; modifiedTime?: string; parentId?: string }[] = []
+    const folderQueue: Array<{ id: string; parentId?: string }> = [{ id: folderId }]
 
     while (folderQueue.length > 0) {
-      const currentFolder = folderQueue.shift()!
+      const { id: currentFolder, parentId } = folderQueue.shift()!
+      // Add folder node itself (except the root vault folder)
+      if (parentId !== undefined) {
+        allFiles.push({ id: currentFolder, name: '', mimeType: 'application/vnd.google-apps.folder', parentId })
+      }
       let pageToken: string | undefined
 
       do {
@@ -34,13 +38,15 @@ export async function GET(req: NextRequest) {
         for (const f of res.data.files || []) {
           if (!f.id || !f.name) continue
           if (f.mimeType === 'application/vnd.google-apps.folder') {
-            folderQueue.push(f.id)
-          } else if (f.name.endsWith('.md')) {
-            mdFiles.push({
+            folderQueue.push({ id: f.id, parentId: currentFolder })
+            allFiles.push({ id: f.id, name: f.name, mimeType: 'application/vnd.google-apps.folder', parentId: currentFolder })
+          } else {
+            allFiles.push({
               id: f.id,
               name: f.name,
-              mimeType: f.mimeType ?? 'text/markdown',
+              mimeType: f.mimeType ?? 'text/plain',
               modifiedTime: f.modifiedTime ?? undefined,
+              parentId: currentFolder,
             })
           }
         }
@@ -49,7 +55,15 @@ export async function GET(req: NextRequest) {
       } while (pageToken)
     }
 
-    return NextResponse.json({ files: mdFiles })
+    // Remove the duplicate folder entries we added for BFS traversal
+    const seen = new Set<string>()
+    const dedupedFiles = allFiles.filter(f => {
+      if (seen.has(f.id)) return false
+      seen.add(f.id)
+      return true
+    })
+
+    return NextResponse.json({ files: dedupedFiles })
   } catch {
     return NextResponse.json({ error: 'Failed to list vault files' }, { status: 500 })
   }

@@ -48,6 +48,7 @@ interface DriveFile {
   modifiedTime?: string;
   webContentLink?: string;
   webViewLink?: string;
+  parentId?: string;
 }
 
 interface Frontmatter {
@@ -1784,7 +1785,12 @@ export default function NotesPage() {
       {/* Phase 5: Graph View */}
       {showGraph && (
         <GraphView
-          files={(allVaultFiles.length > 0 ? allVaultFiles : files).map(f => ({ id: f.id, name: f.name.replace(/\.md$/, '') }))}
+          files={(allVaultFiles.length > 0 ? allVaultFiles : files).map(f => ({
+            id: f.id,
+            name: f.mimeType === 'application/vnd.google-apps.folder' ? f.name : f.name.replace(/\.md$/, ''),
+            mimeType: f.mimeType,
+            parentId: f.parentId,
+          }))}
           links={linkIndex}
           fileMap={fileMap}
           selectedFileId={selectedFile?.id ?? null}

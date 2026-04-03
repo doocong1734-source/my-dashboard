@@ -16,6 +16,8 @@ import { select } from 'd3-selection';
 interface GraphNode extends SimulationNodeDatum {
   id: string;
   name: string;
+  isFolder?: boolean;
+  isMd?: boolean;
 }
 
 interface GraphLink extends SimulationLinkDatum<GraphNode> {
@@ -24,7 +26,7 @@ interface GraphLink extends SimulationLinkDatum<GraphNode> {
 }
 
 interface GraphViewProps {
-  files: Array<{ id: string; name: string }>;
+  files: Array<{ id: string; name: string; mimeType?: string; parentId?: string }>;
   links: Array<{ sourceId: string; targetName: string }>;
   fileMap: Record<string, string>;
   selectedFileId: string | null;
@@ -114,17 +116,27 @@ export default function GraphView({
     const nodes: GraphNode[] = files.map((file) => ({
       id: file.id,
       name: file.name,
+      isFolder: file.mimeType === 'application/vnd.google-apps.folder',
+      isMd: file.name.endsWith('.md'),
     }));
 
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-    const resolvedLinks: GraphLink[] = links
+    // Wiki links between .md files
+    const wikiLinks: GraphLink[] = links
       .map((link) => {
         const targetId = fileMap[link.targetName];
         if (!targetId || !nodeMap.has(link.sourceId)) return null;
         return { source: link.sourceId, target: targetId } as GraphLink;
       })
       .filter((link): link is GraphLink => link !== null);
+
+    // Parent-child folder structure links
+    const structureLinks: GraphLink[] = files
+      .filter(f => f.parentId && nodeMap.has(f.parentId) && nodeMap.has(f.id))
+      .map(f => ({ source: f.parentId!, target: f.id } as GraphLink));
+
+    const resolvedLinks: GraphLink[] = [...wikiLinks, ...structureLinks];
 
     const simulation = forceSimulation<GraphNode>(nodes)
       .force(
@@ -169,10 +181,15 @@ export default function GraphView({
 
     const circles = nodeGroups
       .append('circle')
-      .attr('r', (d) => (d.id === selectedFileId ? 12 : 8))
-      .attr('fill', (d) => (d.id === selectedFileId ? '#FFE500' : '#B197FC'))
+      .attr('r', (d) => d.isFolder ? 14 : (d.id === selectedFileId ? 12 : 8))
+      .attr('fill', (d) => {
+        if (d.id === selectedFileId) return '#FFE500';
+        if (d.isFolder) return '#74C0FC';
+        if (d.isMd) return '#B197FC';
+        return '#A8E6A3';
+      })
       .attr('stroke', '#000000')
-      .attr('stroke-width', 2)
+      .attr('stroke-width', (d) => d.isFolder ? 3 : 2)
       .on('click', (event, d) => {
         event.stopPropagation();
         handleNodeClick(d.id);
