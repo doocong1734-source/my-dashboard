@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
   const vaultFolderId = searchParams.get('vaultFolderId')
   const sessionId = searchParams.get('sessionId')
 
-  const auth = getDriveAccessToken()
+  const auth = await getDriveAccessToken(request, ['drive.read'])
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
   }
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = getDriveAccessToken()
+  const auth = await getDriveAccessToken(request, ['drive.read'])
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
   }
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
     }
 
     const file = await drive.files.create({
-      resource: fileMetadata,
+      requestBody: fileMetadata,
       media: {
         mimeType: 'text/markdown',
         body: content,
@@ -167,7 +167,7 @@ export async function DELETE(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const sessionId = searchParams.get('sessionId')
 
-  const auth = getDriveAccessToken()
+  const auth = await getDriveAccessToken(request, ['drive.read'])
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
   }
