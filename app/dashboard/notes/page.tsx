@@ -693,13 +693,12 @@ export default function NotesPage() {
     if (!q.trim()) { setSearchResults([]); setShowSearchResults(false); return; }
     setIsSearching(true);
     setShowSearchResults(true);
-    const folderParam = vaultFolderId ? `&folderId=${vaultFolderId}` : '';
-    fetch(`/api/notes/search?q=${encodeURIComponent(q)}${folderParam}`)
+    fetch(`/api/notes/search?q=${encodeURIComponent(q)}`)
       .then(r => r.json())
       .then(d => { setSearchResults(d.results || []); })
       .catch(() => {})
       .finally(() => setIsSearching(false));
-  }, [vaultFolderId]);
+  }, []);
 
   const wordCount = useMemo(() => countWords(content), [content]);
   const charCount = useMemo(() => countCharacters(content), [content]);
