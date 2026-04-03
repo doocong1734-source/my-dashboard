@@ -189,6 +189,10 @@ export default function NotesPage() {
   // Drag-and-drop
   const [dragFileId, setDragFileId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  // Recent files (localStorage)
+  const [recentFileIds, setRecentFileIds] = useState<string[]>([]);
+  // Pinned files (localStorage)
+  const [pinnedFileIds, setPinnedFileIds] = useState<string[]>([]);
   // Phase 7: Quick capture
   const [showQuickCapture, setShowQuickCapture] = useState(false);
   const [quickCaptureText, setQuickCaptureText] = useState('');
@@ -206,6 +210,16 @@ export default function NotesPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const outlineRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  // Load recent/pinned from localStorage
+  useEffect(() => {
+    try {
+      const r = localStorage.getItem('notes_recent');
+      if (r) setRecentFileIds(JSON.parse(r));
+      const p = localStorage.getItem('notes_pinned');
+      if (p) setPinnedFileIds(JSON.parse(p));
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -303,18 +317,31 @@ export default function NotesPage() {
 
   const handleSelectFile = useCallback(
     (file: DriveFile) => {
-      if (isDirty && selectedFile) {
-        if (confirm('You have unsaved changes. Discard them?')) {
-          setSelectedFile(file);
-          fetchFileContent(file.id);
-        }
-      } else {
+      const doSelect = () => {
         setSelectedFile(file);
         fetchFileContent(file.id);
+        setRecentFileIds(prev => {
+          const next = [file.id, ...prev.filter(id => id !== file.id)].slice(0, 8);
+          try { localStorage.setItem('notes_recent', JSON.stringify(next)); } catch {}
+          return next;
+        });
+      };
+      if (isDirty && selectedFile) {
+        if (confirm('저장되지 않은 변경사항이 있습니다. 버리시겠습니까?')) doSelect();
+      } else {
+        doSelect();
       }
     },
     [isDirty, selectedFile, fetchFileContent]
   );
+
+  const togglePin = useCallback((fileId: string) => {
+    setPinnedFileIds(prev => {
+      const next = prev.includes(fileId) ? prev.filter(id => id !== fileId) : [...prev, fileId];
+      try { localStorage.setItem('notes_pinned', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
 
   const handleCreateFile = async () => {
     const fileName = prompt('Enter note name:', 'Untitled');
@@ -791,10 +818,28 @@ export default function NotesPage() {
         {/* Left Panel - File List */}
         <aside className="w-60 shrink-0 border-r-4 border-black bg-gray-50">
           <div className="flex h-full flex-col">
-            <div className="border-b-4 border-black bg-gray-100 p-3">
-              <h2 className="text-sm font-black uppercase tracking-wide text-black">
+            <div className="border-b-4 border-black bg-gray-100 px-3 py-2 flex items-center justify-between">
+              <h2 className="text-xs font-black uppercase tracking-wide text-black">
                 Files ({filteredFiles.length})
               </h2>
+              <button
+                title="새 폴더"
+                onClick={async () => {
+                  const name = prompt('폴더 이름:');
+                  if (!name?.trim()) return;
+                  try {
+                    const res = await fetch('/api/drive/create-folder', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name: name.trim(), parentId: currentFolderId }),
+                    });
+                    if (res.ok) fetchFiles(currentFolderId ?? vaultFolderId ?? undefined);
+                  } catch { setError('폴더 생성 실패'); }
+                }}
+                className="border-2 border-black bg-white px-1.5 py-0.5 text-xs font-black hover:bg-[#FFE500] transition-all"
+              >
+                + 폴더
+              </button>
             </div>
 
             {/* Breadcrumb */}
@@ -850,6 +895,54 @@ export default function NotesPage() {
                 </div>
               ) : (
                 <ul className="p-2">
+                  {/* Pinned notes */}
+                  {pinnedFileIds.length > 0 && files.some(f => pinnedFileIds.includes(f.id)) && (
+                    <>
+                      <li className="px-2 pt-2 pb-1">
+                        <span className="text-xs font-black uppercase text-gray-400">📌 고정</span>
+                      </li>
+                      {files.filter(f => pinnedFileIds.includes(f.id)).map(file => (
+                        <li key={`pin-${file.id}`}>
+                          <button
+                            onClick={() => handleSelectFile(file)}
+                            className={`mb-1 flex w-full items-center gap-2 border-2 px-3 py-1.5 text-left transition-all ${
+                              selectedFile?.id === file.id ? 'border-black bg-[#FFE500]' : 'border-transparent bg-yellow-50 hover:border-black'
+                            }`}
+                          >
+                            <span className="text-xs">📌</span>
+                            <span className="truncate text-xs font-bold text-black">{file.name.replace('.md','')}</span>
+                          </button>
+                        </li>
+                      ))}
+                      <li className="border-b-2 border-gray-200 mb-1" />
+                    </>
+                  )}
+                  {/* Recent files */}
+                  {recentFileIds.length > 0 && files.some(f => recentFileIds.includes(f.id)) && !pinnedFileIds.length && (
+                    <>
+                      <li className="px-2 pt-2 pb-1">
+                        <span className="text-xs font-black uppercase text-gray-400">🕐 최근</span>
+                      </li>
+                      {recentFileIds.slice(0,3).map(id => {
+                        const file = files.find(f => f.id === id);
+                        if (!file) return null;
+                        return (
+                          <li key={`recent-${file.id}`}>
+                            <button
+                              onClick={() => handleSelectFile(file)}
+                              className={`mb-1 flex w-full items-center gap-2 border-2 px-3 py-1.5 text-left transition-all ${
+                                selectedFile?.id === file.id ? 'border-black bg-[#FFE500]' : 'border-transparent bg-gray-50 hover:border-black'
+                              }`}
+                            >
+                              <span className="text-xs">🕐</span>
+                              <span className="truncate text-xs font-bold text-black">{file.name.replace('.md','')}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                      <li className="border-b-2 border-gray-200 mb-1" />
+                    </>
+                  )}
                   {/* Folders first (drop targets) */}
                   {folders.map((folder) => (
                     <li key={folder.id}>
@@ -1487,6 +1580,13 @@ export default function NotesPage() {
           className="fixed z-50 min-w-[160px] bg-white border-2 border-black shadow-[3px_3px_0_black]"
           style={{ left: Math.min(contextMenu.x, window.innerWidth - 170), top: Math.min(contextMenu.y, window.innerHeight - 100) }}
         >
+          <button
+            onClick={() => { togglePin(contextMenu.fileId); setContextMenu(null); }}
+            className="flex items-center gap-2 w-full px-4 py-2.5 text-sm font-bold text-black hover:bg-[#FFE500] transition-all"
+          >
+            <span className="text-sm">{pinnedFileIds.includes(contextMenu.fileId) ? '📌 고정 해제' : '📌 고정'}</span>
+          </button>
+          <div className="border-t border-gray-100" />
           <button
             onClick={() => {
               const newName = prompt('새 이름:', contextMenu.fileName.replace('.md', ''));
