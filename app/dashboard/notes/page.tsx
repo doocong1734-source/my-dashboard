@@ -241,7 +241,7 @@ export default function NotesPage() {
       const data = await response.json();
       const all: DriveFile[] = data.files || [];
       setFolders(all.filter(f => f.mimeType === 'application/vnd.google-apps.folder'));
-      setFiles(all.filter(f => f.name.endsWith('.md')));
+      setFiles(all.filter(f => f.mimeType !== 'application/vnd.google-apps.folder'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load files');
     } finally {
@@ -1010,10 +1010,10 @@ export default function NotesPage() {
                               : 'border-transparent bg-white shadow-[2px_2px_0_black] hover:border-black'
                           }`}
                         >
-                          <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#B197FC]" />
+                          <FileText className={`mt-0.5 h-4 w-4 shrink-0 ${file.name.endsWith('.md') ? 'text-[#B197FC]' : 'text-[#74C0FC]'}`} />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-bold text-black">
-                              {file.name.replace('.md', '')}
+                              {file.name.endsWith('.md') ? file.name.replace('.md', '') : file.name}
                             </p>
                             <p className="text-xs text-gray-500">
                               {formatDate(file.modifiedTime)}
