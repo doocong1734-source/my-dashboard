@@ -263,6 +263,7 @@ export default function NotesPage() {
           setVaultFolderId(fid);
           setCurrentFolderId(fid);
           setFolderPath([{ id: fid, name: vaultFolder!.name }]);
+          localStorage.setItem('vault-folder-id', fid);
         }
         fetchFiles(fid);
 
