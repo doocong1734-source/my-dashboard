@@ -21,6 +21,11 @@ async function streamToString(stream: NodeJS.ReadableStream): Promise<string> {
 }
 
 export async function GET(req: NextRequest) {
+  const folderId = req.nextUrl.searchParams.get('folderId')
+  if (folderId && !/^[a-zA-Z0-9_-]+$/.test(folderId)) {
+    return NextResponse.json({ error: 'Invalid folderId' }, { status: 400 })
+  }
+
   const auth = await getDriveAccessToken(req, ['drive.read'])
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
@@ -30,12 +35,13 @@ export async function GET(req: NextRequest) {
     const drive = google.drive({ version: 'v3', auth: oauth2Client })
 
     // Collect all .md files (paginated)
+    const folderFilter = folderId ? `'${folderId}' in parents and ` : ''
     const mdFiles: { id: string; name: string }[] = []
     let pageToken: string | undefined
 
     do {
       const res = await drive.files.list({
-        q: "trashed = false and name contains '.md'",
+        q: `${folderFilter}trashed = false and name contains '.md'`,
         pageSize: 100,
         fields: 'nextPageToken, files(id,name)',
         pageToken,

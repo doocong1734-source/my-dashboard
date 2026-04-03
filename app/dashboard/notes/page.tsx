@@ -175,6 +175,8 @@ export default function NotesPage() {
   const [templates, setTemplates] = useState<{id: string; name: string; content: string}[]>([]);
   const [newNoteName, setNewNoteName] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  // Vault folder
+  const [vaultFolderId, setVaultFolderId] = useState<string | null>(null);
   // Phase 7: Quick capture
   const [showQuickCapture, setShowQuickCapture] = useState(false);
   const [quickCaptureText, setQuickCaptureText] = useState('');
@@ -199,14 +201,13 @@ export default function NotesPage() {
     }
   }, [status, router]);
 
-  const fetchFiles = useCallback(async () => {
+  const fetchFiles = useCallback(async (folderId?: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/drive/files');
-      if (!response.ok) {
-        throw new Error('Failed to fetch files');
-      }
+      const url = folderId ? `/api/drive/files?folderId=${folderId}` : '/api/drive/files';
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch files');
       const data = await response.json();
       const mdFiles = (data.files || []).filter(
         (file: DriveFile) => file.name.endsWith('.md')
@@ -220,25 +221,38 @@ export default function NotesPage() {
   }, []);
 
   useEffect(() => {
-    if (session) {
-      fetchFiles();
-      // Phase 2: load link index (non-blocking, best-effort)
-      fetch('/api/notes/links')
-        .then(r => r.json())
-        .then(d => {
-          if (d.links) setLinkIndex(d.links);
-          if (d.fileMap) setFileMap(d.fileMap);
-        })
-        .catch(() => {}); // silently fail
-      // Phase 3: load tag index
-      fetch('/api/notes/tags')
-        .then(r => r.json())
-        .then(d => {
-          if (d.tagIndex) setTagIndex(d.tagIndex);
-          if (d.noteTagMap) setNoteTagMap(d.noteTagMap);
-        })
-        .catch(() => {});
-    }
+    if (!session) return;
+
+    // Resolve OBSIDIANVAULT folder ID first, then load everything
+    fetch('/api/drive/files?folderId=root')
+      .then(r => r.json())
+      .then(d => {
+        const vaultFolder = (d.files || []).find(
+          (f: DriveFile) => f.mimeType === 'application/vnd.google-apps.folder' && f.name === 'OBSIDIANVAULT'
+        );
+        const fid = vaultFolder?.id ?? undefined;
+        if (fid) setVaultFolderId(fid);
+        fetchFiles(fid);
+
+        const qs = fid ? `?folderId=${fid}` : '';
+        fetch(`/api/notes/links${qs}`)
+          .then(r => r.json())
+          .then(d => {
+            if (d.links) setLinkIndex(d.links);
+            if (d.fileMap) setFileMap(d.fileMap);
+          })
+          .catch(() => {});
+        fetch(`/api/notes/tags${qs}`)
+          .then(r => r.json())
+          .then(d => {
+            if (d.tagIndex) setTagIndex(d.tagIndex);
+            if (d.noteTagMap) setNoteTagMap(d.noteTagMap);
+          })
+          .catch(() => {});
+      })
+      .catch(() => {
+        fetchFiles();
+      });
   }, [session, fetchFiles]);
 
   const fetchFileContent = useCallback(async (fileId: string) => {
@@ -301,7 +315,7 @@ export default function NotesPage() {
         throw new Error('Failed to create file');
       }
 
-      await fetchFiles();
+      await fetchFiles(vaultFolderId ?? undefined);
       const data = await response.json();
       if (data.file) {
         setSelectedFile(data.file);
@@ -365,7 +379,7 @@ export default function NotesPage() {
       setIsDirty(false);
       setFrontmatter({ tags: [] });
       setOutline([]);
-      await fetchFiles();
+      await fetchFiles(vaultFolderId ?? undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete');
     }
@@ -566,12 +580,13 @@ export default function NotesPage() {
     if (!q.trim()) { setSearchResults([]); setShowSearchResults(false); return; }
     setIsSearching(true);
     setShowSearchResults(true);
-    fetch(`/api/notes/search?q=${encodeURIComponent(q)}`)
+    const folderParam = vaultFolderId ? `&folderId=${vaultFolderId}` : '';
+    fetch(`/api/notes/search?q=${encodeURIComponent(q)}${folderParam}`)
       .then(r => r.json())
       .then(d => { setSearchResults(d.results || []); })
       .catch(() => {})
       .finally(() => setIsSearching(false));
-  }, []);
+  }, [vaultFolderId]);
 
   const wordCount = useMemo(() => countWords(content), [content]);
   const charCount = useMemo(() => countCharacters(content), [content]);
@@ -697,7 +712,7 @@ export default function NotesPage() {
                   <div className="rounded-lg border-4 border-red-500 bg-red-100 p-3">
                     <p className="text-sm font-bold text-red-700">{error}</p>
                     <button
-                      onClick={fetchFiles}
+                      onClick={() => fetchFiles(vaultFolderId ?? undefined)}
                       className="mt-2 text-xs font-bold text-red-600 underline"
                     >
                       Retry
@@ -1202,7 +1217,7 @@ export default function NotesPage() {
                     const fd = new FormData();
                     fd.append('file', blob, fname);
                     await fetch('/api/drive/upload', { method: 'POST', body: fd });
-                    await fetchFiles();
+                    await fetchFiles(vaultFolderId ?? undefined);
                     setShowQuickCapture(false);
                     setQuickCaptureText('');
                   }
@@ -1273,7 +1288,7 @@ export default function NotesPage() {
                     try {
                       const res = await fetch('/api/drive/upload', { method: 'POST', body: formData });
                       const data = await res.json();
-                      if (data.file) { await fetchFiles(); setSelectedFile(data.file); setContent(finalContent); setOriginalContent(finalContent); }
+                      if (data.file) { await fetchFiles(vaultFolderId ?? undefined); setSelectedFile(data.file); setContent(finalContent); setOriginalContent(finalContent); }
                       setShowTemplateModal(false);
                     } catch { setError('노트 생성 실패'); setShowTemplateModal(false); }
                   }}

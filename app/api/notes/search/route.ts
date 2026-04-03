@@ -23,6 +23,11 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim() ?? ''
   if (!q) return NextResponse.json({ results: [] })
 
+  const folderId = req.nextUrl.searchParams.get('folderId')
+  if (folderId && !/^[a-zA-Z0-9_-]+$/.test(folderId)) {
+    return NextResponse.json({ error: 'Invalid folderId' }, { status: 400 })
+  }
+
   const auth = await getDriveAccessToken(req, ['drive.read'])
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
@@ -31,11 +36,12 @@ export async function GET(req: NextRequest) {
     oauth2Client.setCredentials({ access_token: auth.accessToken })
     const drive = google.drive({ version: 'v3', auth: oauth2Client })
 
+    const folderFilter = folderId ? `'${folderId}' in parents and ` : ''
     const mdFiles: { id: string; name: string }[] = []
     let pageToken: string | undefined
     do {
       const res = await drive.files.list({
-        q: "trashed = false and name contains '.md'",
+        q: `${folderFilter}trashed = false and name contains '.md'`,
         pageSize: 100,
         fields: 'nextPageToken, files(id,name)',
         pageToken,

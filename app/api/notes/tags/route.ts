@@ -107,26 +107,32 @@ function parseInlineHashtags(content: string): string[] {
 }
 
 export async function GET(req: NextRequest) {
+  const folderId = req.nextUrl.searchParams.get('folderId');
+  if (folderId && !/^[a-zA-Z0-9_-]+$/.test(folderId)) {
+    return NextResponse.json({ error: 'Invalid folderId' }, { status: 400 });
+  }
+
   const authResult = await getDriveAccessToken(req, ['drive.read']);
-  
+
   if (!authResult.ok) {
     return NextResponse.json(
       { error: authResult.error },
       { status: authResult.status }
     );
   }
-  
+
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: authResult.accessToken });
-  
+
   const drive = google.drive({ version: 'v3', auth });
+  const folderFilter = folderId ? `'${folderId}' in parents and ` : '';
   const allFiles: drive_v3.Schema$File[] = [];
   let pageToken: string | null = null;
-  
+
   do {
     try {
       const response: { data: drive_v3.Schema$FileList } = await drive.files.list({
-        q: "name ends with '.md' and trashed = false",
+        q: `${folderFilter}name contains '.md' and trashed = false`,
         fields: 'nextPageToken, files(id, name, mimeType)',
         pageSize: 100,
         pageToken: pageToken || undefined,
