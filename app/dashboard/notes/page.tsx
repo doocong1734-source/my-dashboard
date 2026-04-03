@@ -170,6 +170,11 @@ export default function NotesPage() {
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   // Phase 5: Graph view
   const [showGraph, setShowGraph] = useState(false);
+  // Phase 6: Template system
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templates, setTemplates] = useState<{id: string; name: string; content: string}[]>([]);
+  const [newNoteName, setNewNoteName] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   // Phase 4: Full-text search
   const [fullSearchQuery, setFullSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{fileId: string; fileName: string; snippet: string; matchType: string; matchCount: number}[]>([]);
@@ -583,7 +588,15 @@ export default function NotesPage() {
             Notes
           </h1>
           <button
-            onClick={handleCreateFile}
+            onClick={() => {
+              setNewNoteName('');
+              setSelectedTemplate(null);
+              setShowTemplateModal(true);
+              // Load templates lazily
+              if (templates.length === 0) {
+                fetch('/api/notes/templates').then(r => r.json()).then(d => { if (d.templates) setTemplates(d.templates); }).catch(() => {});
+              }
+            }}
             className="flex items-center gap-2 border-4 border-black bg-black px-4 py-2 font-black text-white shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none"
           >
             <Plus className="h-4 w-4" />
@@ -1141,6 +1154,80 @@ export default function NotesPage() {
           </div>
         </aside>
       </div>
+
+      {/* Phase 6: Template Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-8">
+          <div className="w-full max-w-md border-4 border-black bg-white shadow-[8px_8px_0_black]">
+            <div className="flex items-center justify-between border-b-4 border-black bg-[#FFE500] p-4">
+              <span className="font-black uppercase">새 노트 만들기</span>
+              <button onClick={() => setShowTemplateModal(false)} className="border-2 border-black p-1 hover:bg-black hover:text-white"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="space-y-4 p-5">
+              <div>
+                <label className="mb-1 block text-xs font-black uppercase">노트 이름</label>
+                <input
+                  type="text"
+                  value={newNoteName}
+                  onChange={e => setNewNoteName(e.target.value)}
+                  placeholder="노트 제목..."
+                  className="w-full border-4 border-black px-3 py-2 font-bold outline-none"
+                  autoFocus
+                />
+              </div>
+              {templates.length > 0 && (
+                <div>
+                  <label className="mb-2 block text-xs font-black uppercase">템플릿 선택 (선택사항)</label>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => setSelectedTemplate(null)}
+                      className={`w-full border-2 border-black px-3 py-2 text-left text-sm font-bold transition-all ${selectedTemplate === null ? 'bg-[#FFE500] shadow-[2px_2px_0_black]' : 'bg-white hover:bg-gray-50'}`}
+                    >
+                      빈 노트
+                    </button>
+                    {templates.map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => setSelectedTemplate(t.id)}
+                        className={`w-full border-2 border-black px-3 py-2 text-left text-sm font-bold transition-all ${selectedTemplate === t.id ? 'bg-[#B197FC] shadow-[2px_2px_0_black]' : 'bg-white hover:bg-gray-50'}`}
+                      >
+                        📄 {t.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    const name = newNoteName.trim() || 'Untitled';
+                    const templateContent = selectedTemplate ? (templates.find(t => t.id === selectedTemplate)?.content ?? '') : '';
+                    const finalContent = templateContent
+                      .replace(/\{title\}/g, name)
+                      .replace(/\{date\}/g, new Date().toISOString().split('T')[0])
+                      .replace(/\{time\}/g, new Date().toLocaleTimeString('ko-KR'));
+                    const fullName = name.endsWith('.md') ? name : `${name}.md`;
+                    const blob = new Blob([finalContent], { type: 'text/markdown' });
+                    const formData = new FormData();
+                    formData.append('file', blob, fullName);
+                    try {
+                      const res = await fetch('/api/drive/upload', { method: 'POST', body: formData });
+                      const data = await res.json();
+                      if (data.file) { await fetchFiles(); setSelectedFile(data.file); setContent(finalContent); setOriginalContent(finalContent); }
+                      setShowTemplateModal(false);
+                    } catch { setError('노트 생성 실패'); setShowTemplateModal(false); }
+                  }}
+                  disabled={!newNoteName.trim()}
+                  className="border-4 border-black bg-[#69DB7C] px-5 py-2 font-black disabled:opacity-50"
+                >
+                  만들기
+                </button>
+                <button onClick={() => setShowTemplateModal(false)} className="border-4 border-black bg-white px-5 py-2 font-black">취소</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Phase 5: Graph View */}
       {showGraph && (
