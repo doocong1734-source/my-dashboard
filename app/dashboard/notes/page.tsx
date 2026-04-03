@@ -180,6 +180,7 @@ export default function NotesPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   // Vault folder
   const [vaultFolderId, setVaultFolderId] = useState<string | null>(null);
+  const [allVaultFiles, setAllVaultFiles] = useState<DriveFile[]>([]);
   // Phase 7: Quick capture
   const [showQuickCapture, setShowQuickCapture] = useState(false);
   const [quickCaptureText, setQuickCaptureText] = useState('');
@@ -255,6 +256,13 @@ export default function NotesPage() {
             if (d.noteTagMap) setNoteTagMap(d.noteTagMap);
           })
           .catch(() => {});
+        // Load ALL vault files recursively for graph view
+        if (fid) {
+          fetch(`/api/notes/all-files?folderId=${fid}`)
+            .then(r => r.json())
+            .then(d => { if (d.files) setAllVaultFiles(d.files); })
+            .catch(() => {});
+        }
       })
       .catch(() => {
         fetchFiles();
@@ -1386,7 +1394,7 @@ export default function NotesPage() {
       {/* Phase 5: Graph View */}
       {showGraph && (
         <GraphView
-          files={files.map(f => ({ id: f.id, name: f.name.replace(/\.md$/, '') }))}
+          files={(allVaultFiles.length > 0 ? allVaultFiles : files).map(f => ({ id: f.id, name: f.name.replace(/\.md$/, '') }))}
           links={linkIndex}
           fileMap={fileMap}
           selectedFileId={selectedFile?.id ?? null}
