@@ -189,7 +189,7 @@ export default function NotesPage() {
   const [vaultFolderId, setVaultFolderId] = useState<string | null>(null);
   const [allVaultFiles, setAllVaultFiles] = useState<DriveFile[]>([]);
   // Context menu (right-click rename/delete)
-  const [contextMenu, setContextMenu] = useState<{ fileId: string; fileName: string; x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ fileId: string; fileName: string; x: number; y: number; isFolder?: boolean } | null>(null);
   // Drag-and-drop
   const [dragFileId, setDragFileId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
@@ -214,6 +214,8 @@ export default function NotesPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const outlineRefs = useRef<Record<string, HTMLElement | null>>({});
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Load recent/pinned from localStorage
   useEffect(() => {
@@ -347,6 +349,19 @@ export default function NotesPage() {
       return next;
     });
   }, []);
+
+  const handleUploadFiles = async (fileList: FileList) => {
+    const folderId = currentFolderId ?? vaultFolderId ?? undefined;
+    for (const file of Array.from(fileList)) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+        if (folderId) formData.append('folderId', folderId);
+        await fetch('/api/drive/upload', { method: 'POST', body: formData });
+      } catch { /* ignore individual failures */ }
+    }
+    fetchFiles(folderId);
+  };
 
   const handleCreateFile = async () => {
     const fileName = prompt('Enter note name:', 'Untitled');
@@ -642,9 +657,27 @@ export default function NotesPage() {
   );
 
   const scrollToHeading = (id: string) => {
-    const element = outlineRefs.current[id];
-    if (element && previewRef.current) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (activeTab === 'edit') {
+      // Find heading in textarea by searching for the heading text
+      const item = outline.find(o => o.id === id);
+      if (item && textareaRef.current) {
+        const lines = content.split('\n');
+        let charPos = 0;
+        for (const line of lines) {
+          if (line.replace(/^#+\s*/, '') === item.text) {
+            textareaRef.current.focus();
+            textareaRef.current.setSelectionRange(charPos, charPos + line.length);
+            const lineIndex = content.slice(0, charPos).split('\n').length - 1;
+            const lineHeight = textareaRef.current.scrollHeight / lines.length;
+            textareaRef.current.scrollTop = lineIndex * lineHeight - 100;
+            break;
+          }
+          charPos += line.length + 1;
+        }
+      }
+    } else {
+      const element = outlineRefs.current[id];
+      if (element) element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
@@ -852,6 +885,20 @@ export default function NotesPage() {
               >
                 + 폴더
               </button>
+              <button
+                title="파일 업로드"
+                onClick={() => uploadInputRef.current?.click()}
+                className="border-2 border-black bg-white px-1.5 py-0.5 text-xs font-black hover:bg-[#74C0FC] transition-all"
+              >
+                ↑ 업로드
+              </button>
+              <input
+                ref={uploadInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => { if (e.target.files) { handleUploadFiles(e.target.files); e.target.value = ''; } }}
+              />
             </div>
 
             {/* Breadcrumb */}
@@ -888,7 +935,16 @@ export default function NotesPage() {
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto">
+            <div
+              className={`flex-1 overflow-y-auto ${isDraggingOver ? 'bg-blue-50 ring-2 ring-inset ring-blue-400' : ''}`}
+              onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setIsDraggingOver(true); } }}
+              onDragLeave={() => setIsDraggingOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDraggingOver(false);
+                if (e.dataTransfer.files.length > 0) handleUploadFiles(e.dataTransfer.files);
+              }}
+            >
               {isLoading ? (
                 <div className="flex items-center justify-center p-8">
                   <Loader2 className="h-8 w-8 animate-spin text-black" />
@@ -964,6 +1020,7 @@ export default function NotesPage() {
                           setFolderPath(prev => [...prev, { id: folder.id, name: folder.name }]);
                           fetchFiles(folder.id);
                         }}
+                        onContextMenu={(e) => { e.preventDefault(); setContextMenu({ fileId: folder.id, fileName: folder.name, x: e.clientX, y: e.clientY, isFolder: true }); }}
                         onDragOver={(e) => { e.preventDefault(); setDropTargetId(folder.id); }}
                         onDragLeave={() => setDropTargetId(null)}
                         onDrop={(e) => {
@@ -1620,21 +1677,27 @@ export default function NotesPage() {
       {contextMenu && (
         <div
           className="fixed z-50 min-w-[160px] bg-white border-2 border-black shadow-[3px_3px_0_black]"
-          style={{ left: Math.min(contextMenu.x, window.innerWidth - 170), top: Math.min(contextMenu.y, window.innerHeight - 100) }}
+          style={{ left: Math.min(contextMenu.x, window.innerWidth - 170), top: Math.min(contextMenu.y, window.innerHeight - 120) }}
         >
-          <button
-            onClick={() => { togglePin(contextMenu.fileId); setContextMenu(null); }}
-            className="flex items-center gap-2 w-full px-4 py-2.5 text-sm font-bold text-black hover:bg-[#FFE500] transition-all"
-          >
-            <span className="text-sm">{pinnedFileIds.includes(contextMenu.fileId) ? '📌 고정 해제' : '📌 고정'}</span>
-          </button>
-          <div className="border-t border-gray-100" />
+          {!contextMenu.isFolder && (
+            <>
+              <button
+                onClick={() => { togglePin(contextMenu.fileId); setContextMenu(null); }}
+                className="flex items-center gap-2 w-full px-4 py-2.5 text-sm font-bold text-black hover:bg-[#FFE500] transition-all"
+              >
+                <span className="text-sm">{pinnedFileIds.includes(contextMenu.fileId) ? '📌 고정 해제' : '📌 고정'}</span>
+              </button>
+              <div className="border-t border-gray-100" />
+            </>
+          )}
           <button
             onClick={() => {
-              const newName = prompt('새 이름:', contextMenu.fileName.replace('.md', ''));
+              const displayName = contextMenu.isFolder ? contextMenu.fileName : contextMenu.fileName.replace('.md', '');
+              const newName = prompt('새 이름:', displayName);
               if (newName?.trim()) {
                 const n = newName.trim();
-                handleRename(contextMenu.fileId, n.endsWith('.md') ? n : `${n}.md`);
+                const finalName = contextMenu.isFolder ? n : (n.endsWith('.md') ? n : `${n}.md`);
+                handleRename(contextMenu.fileId, finalName);
               }
               setContextMenu(null);
             }}
@@ -1645,7 +1708,8 @@ export default function NotesPage() {
           <div className="border-t-2 border-black" />
           <button
             onClick={() => {
-              if (confirm(`"${contextMenu.fileName.replace('.md', '')}" 삭제하시겠습니까?`)) {
+              const displayName = contextMenu.isFolder ? contextMenu.fileName : contextMenu.fileName.replace('.md', '');
+              if (confirm(`"${displayName}" 삭제하시겠습니까?`)) {
                 handleDelete(contextMenu.fileId);
               }
               setContextMenu(null);
