@@ -162,6 +162,10 @@ export default function NotesPage() {
     visible: false, query: '', triggerPos: 0, suggestions: [],
   });
   const autocompleteRef = useRef<HTMLDivElement>(null);
+  // Phase 3: Tag system
+  const [tagIndex, setTagIndex] = useState<{tag: string; noteIds: string[]; frequency: number}[]>([]);
+  const [noteTagMap, setNoteTagMap] = useState<Record<string, string[]>>({});
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
   const [frontmatter, setFrontmatter] = useState<Frontmatter>({ tags: [] });
   const [outline, setOutline] = useState<OutlineItem[]>([]);
@@ -208,6 +212,14 @@ export default function NotesPage() {
           if (d.fileMap) setFileMap(d.fileMap);
         })
         .catch(() => {}); // silently fail
+      // Phase 3: load tag index
+      fetch('/api/notes/tags')
+        .then(r => r.json())
+        .then(d => {
+          if (d.tagIndex) setTagIndex(d.tagIndex);
+          if (d.noteTagMap) setNoteTagMap(d.noteTagMap);
+        })
+        .catch(() => {});
     }
   }, [session, fetchFiles]);
 
@@ -358,10 +370,20 @@ export default function NotesPage() {
   }, [content, originalContent]);
 
   const filteredFiles = useMemo(() => {
-    if (!searchQuery) return files;
-    const query = searchQuery.toLowerCase();
-    return files.filter((file) => file.name.toLowerCase().includes(query));
-  }, [files, searchQuery]);
+    let result = files;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((file) => file.name.toLowerCase().includes(query));
+    }
+    // Phase 3: tag filter
+    if (activeTagFilter) {
+      result = result.filter((file) => {
+        const tags = noteTagMap[file.id] || [];
+        return tags.includes(activeTagFilter);
+      });
+    }
+    return result;
+  }, [files, searchQuery, activeTagFilter, noteTagMap]);
 
   const insertText = useCallback(
     (before: string, after: string = '', placeholder: string = '') => {
@@ -621,6 +643,37 @@ export default function NotesPage() {
                 </ul>
               )}
             </div>
+
+            {/* Phase 3: Tag Filter */}
+            {tagIndex.length > 0 && (
+              <div className="border-t-4 border-black">
+                <div className="border-b-2 border-black bg-gray-100 px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase text-gray-600">태그 필터</span>
+                    {activeTagFilter && (
+                      <button onClick={() => setActiveTagFilter(null)} className="text-xs font-bold text-gray-400 hover:text-black">
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1 p-2">
+                  {tagIndex.slice(0, 12).map(({ tag, frequency }) => (
+                    <button
+                      key={tag}
+                      onClick={() => setActiveTagFilter(activeTagFilter === tag ? null : tag)}
+                      className={`border-2 border-black px-2 py-0.5 text-xs font-bold transition-all ${
+                        activeTagFilter === tag
+                          ? 'bg-[#B197FC] text-black shadow-[2px_2px_0_black]'
+                          : 'bg-white text-black hover:bg-[#B197FC]'
+                      }`}
+                    >
+                      #{tag} <span className="opacity-60">{frequency}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </aside>
 
