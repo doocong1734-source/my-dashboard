@@ -175,6 +175,9 @@ export default function NotesPage() {
   const [templates, setTemplates] = useState<{id: string; name: string; content: string}[]>([]);
   const [newNoteName, setNewNoteName] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  // Phase 7: Quick capture
+  const [showQuickCapture, setShowQuickCapture] = useState(false);
+  const [quickCaptureText, setQuickCaptureText] = useState('');
   // Phase 4: Full-text search
   const [fullSearchQuery, setFullSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{fileId: string; fileName: string; snippet: string; matchType: string; matchCount: number}[]>([]);
@@ -373,6 +376,12 @@ export default function NotesPage() {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         handleSave();
+      }
+      // Phase 7: Quick capture Ctrl+Shift+N
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'n') {
+        e.preventDefault();
+        setQuickCaptureText('');
+        setShowQuickCapture(true);
       }
     };
 
@@ -906,6 +915,17 @@ export default function NotesPage() {
                       Save
                     </button>
 
+                    {/* Export Button */}
+                    {selectedFile && (
+                      <a
+                        href={`/api/notes/export?fileId=${selectedFile.id}&format=md`}
+                        download
+                        className="rounded border-4 border-black bg-[#74C0FC] p-2 text-black shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black]"
+                        title="MD로 내보내기"
+                      >
+                        ↓
+                      </a>
+                    )}
                     {/* Delete Button */}
                     <button
                       onClick={handleDelete}
@@ -1154,6 +1174,46 @@ export default function NotesPage() {
           </div>
         </aside>
       </div>
+
+      {/* Phase 7: Quick Capture (Ctrl+Shift+N) */}
+      {showQuickCapture && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-32 bg-black/60">
+          <div className="w-full max-w-lg border-4 border-black bg-white shadow-[8px_8px_0_black]">
+            <div className="flex items-center justify-between border-b-4 border-black bg-[#69DB7C] px-4 py-3">
+              <span className="font-black uppercase">빠른 메모 (Ctrl+Shift+N)</span>
+              <button onClick={() => setShowQuickCapture(false)}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-4">
+              <textarea
+                autoFocus
+                value={quickCaptureText}
+                onChange={e => setQuickCaptureText(e.target.value)}
+                placeholder="메모를 입력하세요... (Enter+Shift로 줄바꿈)"
+                className="w-full resize-none border-4 border-black p-3 font-mono text-sm outline-none"
+                rows={5}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const text = quickCaptureText.trim();
+                    if (!text) return;
+                    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                    const fname = `QuickNote-${ts}.md`;
+                    const blob = new Blob([text], { type: 'text/markdown' });
+                    const fd = new FormData();
+                    fd.append('file', blob, fname);
+                    await fetch('/api/drive/upload', { method: 'POST', body: fd });
+                    await fetchFiles();
+                    setShowQuickCapture(false);
+                    setQuickCaptureText('');
+                  }
+                  if (e.key === 'Escape') setShowQuickCapture(false);
+                }}
+              />
+              <p className="mt-1 text-xs text-gray-400">Enter로 저장 · Shift+Enter 줄바꿈 · Esc 닫기</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Phase 6: Template Modal */}
       {showTemplateModal && (
