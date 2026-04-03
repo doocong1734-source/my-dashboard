@@ -47,6 +47,7 @@ interface DriveFile {
   mimeType: string;
   modifiedTime?: string;
   webContentLink?: string;
+  webViewLink?: string;
 }
 
 interface Frontmatter {
@@ -1079,7 +1080,37 @@ export default function NotesPage() {
 
         {/* Center Panel - Editor */}
         <main className="flex flex-1 flex-col overflow-hidden">
-          {selectedFile ? (
+          {selectedFile && !selectedFile.name.endsWith('.md') ? (
+            /* Office / PDF Viewer */
+            <div className="flex flex-1 flex-col overflow-hidden">
+              <div className="flex shrink-0 items-center justify-between border-b-4 border-black bg-[#FFE500] px-4 py-3">
+                <span className="text-sm font-black truncate max-w-[60%]">{selectedFile.name}</span>
+                <div className="flex items-center gap-2">
+                  {selectedFile.webViewLink && (
+                    <a
+                      href={selectedFile.webViewLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="border-2 border-black bg-white px-3 py-1.5 text-xs font-black hover:bg-black hover:text-white transition-all"
+                    >
+                      Google에서 열기 ↗
+                    </a>
+                  )}
+                  <button
+                    onClick={() => { setSelectedFile(null); }}
+                    className="border-2 border-black bg-white p-1.5 hover:bg-red-100 transition-all"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <iframe
+                src={`https://drive.google.com/file/d/${selectedFile.id}/preview`}
+                className="flex-1 w-full border-0"
+                allow="autoplay"
+              />
+            </div>
+          ) : selectedFile ? (
             <>
               {/* Toolbar */}
               <div className="shrink-0 border-b-4 border-black bg-gray-100 p-2">
