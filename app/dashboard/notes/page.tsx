@@ -186,6 +186,9 @@ export default function NotesPage() {
   const [allVaultFiles, setAllVaultFiles] = useState<DriveFile[]>([]);
   // Context menu (right-click rename/delete)
   const [contextMenu, setContextMenu] = useState<{ fileId: string; fileName: string; x: number; y: number } | null>(null);
+  // Drag-and-drop
+  const [dragFileId, setDragFileId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   // Phase 7: Quick capture
   const [showQuickCapture, setShowQuickCapture] = useState(false);
   const [quickCaptureText, setQuickCaptureText] = useState('');
@@ -348,6 +351,18 @@ export default function NotesPage() {
       setError(err instanceof Error ? err.message : 'Failed to create file');
     }
   };
+
+  const handleMoveFile = useCallback(async (fileId: string, targetFolderId: string) => {
+    try {
+      const res = await fetch('/api/drive/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId, targetFolderId, currentFolderId }),
+      });
+      if (!res.ok) throw new Error('Move failed');
+      setFiles(prev => prev.filter(f => f.id !== fileId));
+    } catch { setError('파일 이동 실패'); }
+  }, [currentFolderId]);
 
   const handleRename = useCallback(async (fileId: string, newName: string) => {
     try {
@@ -835,7 +850,7 @@ export default function NotesPage() {
                 </div>
               ) : (
                 <ul className="p-2">
-                  {/* Folders first */}
+                  {/* Folders first (drop targets) */}
                   {folders.map((folder) => (
                     <li key={folder.id}>
                       <button
@@ -844,7 +859,21 @@ export default function NotesPage() {
                           setFolderPath(prev => [...prev, { id: folder.id, name: folder.name }]);
                           fetchFiles(folder.id);
                         }}
-                        className="mb-1 flex w-full items-center gap-2 border-2 border-transparent bg-gray-100 px-3 py-2 text-left hover:border-black hover:bg-[#FFE500] transition-all"
+                        onDragOver={(e) => { e.preventDefault(); setDropTargetId(folder.id); }}
+                        onDragLeave={() => setDropTargetId(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDropTargetId(null);
+                          if (dragFileId && dragFileId !== folder.id) {
+                            handleMoveFile(dragFileId, folder.id);
+                            setDragFileId(null);
+                          }
+                        }}
+                        className={`mb-1 flex w-full items-center gap-2 border-2 px-3 py-2 text-left transition-all ${
+                          dropTargetId === folder.id
+                            ? 'border-black bg-[#FFE500] shadow-[2px_2px_0_black]'
+                            : 'border-transparent bg-gray-100 hover:border-black hover:bg-[#FFE500]'
+                        }`}
                       >
                         <ChevronRight className="h-3 w-3 shrink-0 text-gray-500" />
                         <span className="truncate text-sm font-bold text-black">{folder.name}</span>
@@ -863,9 +892,14 @@ export default function NotesPage() {
                     filteredFiles.map((file) => (
                       <li key={file.id}>
                         <button
+                          draggable
+                          onDragStart={() => setDragFileId(file.id)}
+                          onDragEnd={() => { setDragFileId(null); setDropTargetId(null); }}
                           onClick={() => handleSelectFile(file)}
                           onContextMenu={(e) => { e.preventDefault(); setContextMenu({ fileId: file.id, fileName: file.name, x: e.clientX, y: e.clientY }); }}
                           className={`mb-1 flex w-full items-start gap-2 border-4 p-3 text-left transition-all ${
+                            dragFileId === file.id ? 'opacity-50 ' : ''
+                          }${
                             selectedFile?.id === file.id
                               ? 'border-black bg-[#FFE500] shadow-[2px_2px_0_black]'
                               : 'border-transparent bg-white shadow-[2px_2px_0_black] hover:border-black'
