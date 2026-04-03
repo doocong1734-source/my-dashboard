@@ -31,8 +31,13 @@ export async function GET(req: NextRequest) {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) {
-      const errBody = await res.text()
-      return NextResponse.json({ error: errBody }, { status: res.status })
+      try {
+        const errJson = await res.json() as { error?: { message?: string } }
+        const msg = errJson?.error?.message || `Calendar API error (${res.status})`
+        return NextResponse.json({ error: msg }, { status: res.status })
+      } catch {
+        return NextResponse.json({ error: `Calendar API error (${res.status})` }, { status: res.status })
+      }
     }
     const data = await res.json()
     const events = (data.items || []).map((item: {
