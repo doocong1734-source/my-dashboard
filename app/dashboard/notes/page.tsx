@@ -166,6 +166,12 @@ export default function NotesPage() {
   const [tagIndex, setTagIndex] = useState<{tag: string; noteIds: string[]; frequency: number}[]>([]);
   const [noteTagMap, setNoteTagMap] = useState<Record<string, string[]>>({});
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  // Phase 4: Full-text search
+  const [fullSearchQuery, setFullSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{fileId: string; fileName: string; snippet: string; matchType: string; matchCount: number}[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
   const [frontmatter, setFrontmatter] = useState<Frontmatter>({ tags: [] });
   const [outline, setOutline] = useState<OutlineItem[]>([]);
@@ -537,6 +543,18 @@ export default function NotesPage() {
     return matches.length;
   }, [content]);
 
+  // Phase 4: debounced full-text search
+  const runFullSearch = useCallback((q: string) => {
+    if (!q.trim()) { setSearchResults([]); setShowSearchResults(false); return; }
+    setIsSearching(true);
+    setShowSearchResults(true);
+    fetch(`/api/notes/search?q=${encodeURIComponent(q)}`)
+      .then(r => r.json())
+      .then(d => { setSearchResults(d.results || []); })
+      .catch(() => {})
+      .finally(() => setIsSearching(false));
+  }, []);
+
   const wordCount = useMemo(() => countWords(content), [content]);
   const charCount = useMemo(() => countCharacters(content), [content]);
 
@@ -569,15 +587,58 @@ export default function NotesPage() {
           </button>
         </div>
 
+        {/* Phase 4: Full-text search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
           <input
             type="text"
-            placeholder="Search notes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="전문 검색... (내용 포함)"
+            value={fullSearchQuery}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFullSearchQuery(v);
+              if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+              searchTimerRef.current = setTimeout(() => runFullSearch(v), 400);
+            }}
+            onKeyDown={(e) => e.key === 'Escape' && setShowSearchResults(false)}
             className="w-80 border-4 border-black py-2 pl-10 pr-4 font-medium shadow-[4px_4px_0_black] placeholder:text-gray-400 focus:outline-none focus:ring-0"
           />
+          {/* Search Results Dropdown */}
+          {showSearchResults && (
+            <div className="absolute right-0 top-full z-50 mt-1 w-[480px] border-4 border-black bg-white shadow-[6px_6px_0_black]">
+              <div className="flex items-center justify-between border-b-2 border-black bg-[#FFE500] px-3 py-2">
+                <span className="text-xs font-black">검색 결과 {searchResults.length}개</span>
+                <button onClick={() => setShowSearchResults(false)}><X className="h-4 w-4" /></button>
+              </div>
+              {isSearching ? (
+                <div className="flex items-center justify-center p-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
+              ) : searchResults.length === 0 ? (
+                <p className="p-4 text-sm text-gray-400">결과 없음</p>
+              ) : (
+                <div className="max-h-80 overflow-y-auto">
+                  {searchResults.map((r) => (
+                    <button
+                      key={r.fileId}
+                      onClick={() => {
+                        const f = files.find(f => f.id === r.fileId);
+                        if (f) { handleSelectFile(f); setShowSearchResults(false); setFullSearchQuery(''); }
+                      }}
+                      className="flex w-full flex-col gap-1 border-b border-gray-100 px-3 py-2 text-left hover:bg-[#FFE500]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-3 w-3 shrink-0 text-[#B197FC]" />
+                        <span className="text-sm font-black text-black">{r.fileName}</span>
+                        <span className={`ml-auto text-xs font-bold border px-1 ${r.matchType === 'both' ? 'border-black bg-[#FFE500]' : r.matchType === 'filename' ? 'border-gray-300' : 'border-[#B197FC] bg-[#B197FC]/20'}`}>
+                          {r.matchType === 'both' ? '파일명+내용' : r.matchType === 'filename' ? '파일명' : `내용 ${r.matchCount}회`}
+                        </span>
+                      </div>
+                      {r.snippet && <p className="text-xs text-gray-500 line-clamp-2">{r.snippet}</p>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
