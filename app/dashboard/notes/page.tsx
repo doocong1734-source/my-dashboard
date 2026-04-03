@@ -813,6 +813,24 @@ export default function NotesPage() {
               )}
             </div>
 
+            {/* New Note in current folder */}
+            <div className="border-t-2 border-black p-2">
+              <button
+                onClick={() => {
+                  setNewNoteName('');
+                  setSelectedTemplate(null);
+                  setShowTemplateModal(true);
+                  if (templates.length === 0) {
+                    fetch('/api/notes/templates').then(r => r.json()).then(d => { if (d.templates) setTemplates(d.templates); }).catch(() => {});
+                  }
+                }}
+                className="flex w-full items-center justify-center gap-2 border-2 border-black bg-black py-2 font-black text-white text-xs hover:bg-[#FFE500] hover:text-black transition-all"
+              >
+                <Plus className="h-3 w-3" />
+                {currentFolderId && currentFolderId !== vaultFolderId ? '이 폴더에 추가' : '새 노트'}
+              </button>
+            </div>
+
             {/* Phase 3: Tag Filter */}
             {tagIndex.length > 0 && (
               <div className="border-t-4 border-black">
@@ -1345,9 +1363,10 @@ export default function NotesPage() {
                     const formData = new FormData();
                     formData.append('file', blob, fullName);
                     try {
+                      if (currentFolderId) formData.append('folderId', currentFolderId);
                       const res = await fetch('/api/drive/upload', { method: 'POST', body: formData });
                       const data = await res.json();
-                      if (data.file) { await fetchFiles(vaultFolderId ?? undefined); setSelectedFile(data.file); setContent(finalContent); setOriginalContent(finalContent); }
+                      if (data.file) { await fetchFiles(currentFolderId ?? vaultFolderId ?? undefined); setSelectedFile(data.file); setContent(finalContent); setOriginalContent(finalContent); }
                       setShowTemplateModal(false);
                     } catch { setError('노트 생성 실패'); setShowTemplateModal(false); }
                   }}
