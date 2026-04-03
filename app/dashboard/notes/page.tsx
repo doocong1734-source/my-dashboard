@@ -228,7 +228,7 @@ export default function NotesPage() {
       .then(r => r.json())
       .then(d => {
         const vaultFolder = (d.files || []).find(
-          (f: DriveFile) => f.mimeType === 'application/vnd.google-apps.folder' && f.name === 'OBSIDIANVAULT'
+          (f: DriveFile) => f.mimeType === 'application/vnd.google-apps.folder' && f.name.toLowerCase() === 'obsidianvault'
         );
         const fid = vaultFolder?.id ?? undefined;
         if (fid) setVaultFolderId(fid);
