@@ -31,10 +31,13 @@ import {
   File,
   ChevronRight,
   ArrowLeftRight,
-  GitFork
+  GitFork,
+  Calendar,
+  Pencil
 } from 'lucide-react';
 import 'highlight.js/styles/github.css';
 import GraphView from './GraphView';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
 interface DriveFile {
   id: string;
@@ -181,6 +184,8 @@ export default function NotesPage() {
   // Vault folder
   const [vaultFolderId, setVaultFolderId] = useState<string | null>(null);
   const [allVaultFiles, setAllVaultFiles] = useState<DriveFile[]>([]);
+  // Context menu (right-click rename/delete)
+  const [contextMenu, setContextMenu] = useState<{ fileId: string; fileName: string; x: number; y: number } | null>(null);
   // Phase 7: Quick capture
   const [showQuickCapture, setShowQuickCapture] = useState(false);
   const [quickCaptureText, setQuickCaptureText] = useState('');
@@ -344,6 +349,58 @@ export default function NotesPage() {
     }
   };
 
+  const handleRename = useCallback(async (fileId: string, newName: string) => {
+    try {
+      const res = await fetch('/api/drive/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId, name: newName }),
+      });
+      if (!res.ok) throw new Error('Rename failed');
+      const { file: renamed } = await res.json();
+      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: renamed.name } : f));
+      if (selectedFile?.id === fileId) setSelectedFile(prev => prev ? { ...prev, name: renamed.name } : null);
+    } catch { setError('이름 변경 실패'); }
+  }, [selectedFile]);
+
+  const handleDelete = useCallback(async (fileId: string) => {
+    try {
+      const res = await fetch('/api/drive/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId }),
+      });
+      if (!res.ok) throw new Error('Delete failed');
+      setFiles(prev => prev.filter(f => f.id !== fileId));
+      if (selectedFile?.id === fileId) { setSelectedFile(null); setContent(''); }
+    } catch { setError('삭제 실패'); }
+  }, [selectedFile]);
+
+  // Daily note
+  const todayFileName = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}.md`;
+  }, []);
+
+  const handleDailyNote = useCallback(async () => {
+    const existing = files.find(f => f.name === todayFileName);
+    if (existing) { handleSelectFile(existing); return; }
+    const fid = currentFolderId ?? vaultFolderId;
+    if (!fid) return;
+    const blob = new Blob([`# ${todayFileName.replace('.md','')}\n\n`], { type: 'text/markdown' });
+    const fd = new FormData();
+    fd.append('file', blob, todayFileName);
+    fd.append('folderId', fid);
+    try {
+      const res = await fetch('/api/drive/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.file) {
+        await fetchFiles(currentFolderId ?? vaultFolderId ?? undefined);
+        handleSelectFile(data.file);
+      }
+    } catch { setError('데일리 노트 생성 실패'); }
+  }, [files, todayFileName, currentFolderId, vaultFolderId, fetchFiles]);
+
   const handleSave = useCallback(async () => {
     if (!selectedFile || !isDirty) return;
 
@@ -372,7 +429,7 @@ export default function NotesPage() {
     }
   }, [selectedFile, isDirty, content]);
 
-  const handleDelete = async () => {
+  const handleDeleteSelected = async () => {
     if (!selectedFile) return;
     if (!confirm(`Delete "${selectedFile.name}"?`)) return;
 
@@ -642,6 +699,14 @@ export default function NotesPage() {
             New Note
           </button>
           <button
+            onClick={handleDailyNote}
+            className="flex items-center gap-2 border-4 border-black bg-[#69DB7C] px-4 py-2 font-black text-black shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black]"
+            title="오늘의 노트"
+          >
+            <Calendar className="h-4 w-4" />
+            오늘
+          </button>
+          <button
             onClick={() => setShowGraph(true)}
             className="flex items-center gap-2 border-4 border-black bg-[#B197FC] px-4 py-2 font-black text-black shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black]"
             title="그래프 뷰"
@@ -799,6 +864,7 @@ export default function NotesPage() {
                       <li key={file.id}>
                         <button
                           onClick={() => handleSelectFile(file)}
+                          onContextMenu={(e) => { e.preventDefault(); setContextMenu({ fileId: file.id, fileName: file.name, x: e.clientX, y: e.clientY }); }}
                           className={`mb-1 flex w-full items-start gap-2 border-4 p-3 text-left transition-all ${
                             selectedFile?.id === file.id
                               ? 'border-black bg-[#FFE500] shadow-[2px_2px_0_black]'
@@ -1029,7 +1095,7 @@ export default function NotesPage() {
                     )}
                     {/* Delete Button */}
                     <button
-                      onClick={handleDelete}
+                      onClick={handleDeleteSelected}
                       className="rounded border-4 border-red-500 bg-red-100 p-2 text-red-600 shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none"
                       title="Delete Note"
                     >
@@ -1098,24 +1164,14 @@ export default function NotesPage() {
                       onScroll={handleScroll}
                     >
                       <div className="prose max-w-none">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[rehypeHighlight]}
-                        >
-                          {content}
-                        </ReactMarkdown>
+                        <MarkdownRenderer content={content} />
                       </div>
                     </div>
                   </div>
                 ) : (
                   <div className="h-full w-full overflow-y-auto bg-white p-6">
                     <div className="prose max-w-none rounded-lg border-4 border-black p-6 shadow-[4px_4px_0_black]">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight]}
-                      >
-                        {content}
-                      </ReactMarkdown>
+                      <MarkdownRenderer content={content} />
                     </div>
                   </div>
                 )}
@@ -1390,6 +1446,41 @@ export default function NotesPage() {
           </div>
         </div>
       )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-[160px] bg-white border-2 border-black shadow-[3px_3px_0_black]"
+          style={{ left: Math.min(contextMenu.x, window.innerWidth - 170), top: Math.min(contextMenu.y, window.innerHeight - 100) }}
+        >
+          <button
+            onClick={() => {
+              const newName = prompt('새 이름:', contextMenu.fileName.replace('.md', ''));
+              if (newName?.trim()) {
+                const n = newName.trim();
+                handleRename(contextMenu.fileId, n.endsWith('.md') ? n : `${n}.md`);
+              }
+              setContextMenu(null);
+            }}
+            className="flex items-center gap-2 w-full px-4 py-2.5 text-sm font-bold text-black hover:bg-[#FFE500] transition-all"
+          >
+            <Pencil className="h-4 w-4" /> 이름 변경
+          </button>
+          <div className="border-t-2 border-black" />
+          <button
+            onClick={() => {
+              if (confirm(`"${contextMenu.fileName.replace('.md', '')}" 삭제하시겠습니까?`)) {
+                handleDelete(contextMenu.fileId);
+              }
+              setContextMenu(null);
+            }}
+            className="flex items-center gap-2 w-full px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 transition-all"
+          >
+            <Trash2 className="h-4 w-4" /> 삭제
+          </button>
+        </div>
+      )}
+      {contextMenu && <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />}
 
       {/* Phase 5: Graph View */}
       {showGraph && (
