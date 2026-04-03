@@ -627,7 +627,8 @@ export default function NotesPage() {
                 fetch('/api/notes/templates').then(r => r.json()).then(d => { if (d.templates) setTemplates(d.templates); }).catch(() => {});
               }
             }}
-            className="flex items-center gap-2 border-4 border-black bg-black px-4 py-2 font-black text-white shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none"
+            style={{ color: '#fff' }}
+            className="flex items-center gap-2 border-4 border-black bg-black px-4 py-2 font-black shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none"
           >
             <Plus className="h-4 w-4" />
             New Note
@@ -824,7 +825,7 @@ export default function NotesPage() {
                     fetch('/api/notes/templates').then(r => r.json()).then(d => { if (d.templates) setTemplates(d.templates); }).catch(() => {});
                   }
                 }}
-                className="flex w-full items-center justify-center gap-2 border-2 border-black bg-black py-2 font-black text-white text-xs hover:bg-[#FFE500] hover:text-black transition-all"
+                className="flex w-full items-center justify-center gap-2 border-2 border-black bg-[#FFE500] py-2 font-black text-xs text-black hover:bg-black hover:text-white transition-all"
               >
                 <Plus className="h-3 w-3" />
                 {currentFolderId && currentFolderId !== vaultFolderId ? '이 폴더에 추가' : '새 노트'}
