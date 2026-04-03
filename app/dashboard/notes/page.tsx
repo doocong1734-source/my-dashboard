@@ -29,7 +29,8 @@ import {
   X,
   Trash2,
   File,
-  ChevronRight
+  ChevronRight,
+  ArrowLeftRight
 } from 'lucide-react';
 import 'highlight.js/styles/github.css';
 
@@ -51,6 +52,20 @@ interface OutlineItem {
   level: number;
   text: string;
   id: string;
+}
+
+interface WikiLinkEntry {
+  sourceId: string;
+  sourceName: string;
+  targetName: string;
+  alias?: string;
+}
+
+interface AutocompleteState {
+  visible: boolean;
+  query: string;
+  triggerPos: number; // position of [[ in textarea
+  suggestions: string[];
 }
 
 const parseFrontmatter = (content: string): { frontmatter: Frontmatter; body: string } => {
@@ -140,6 +155,13 @@ export default function NotesPage() {
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  // Phase 2: Link index
+  const [linkIndex, setLinkIndex] = useState<WikiLinkEntry[]>([]);
+  const [fileMap, setFileMap] = useState<Record<string, string>>({});
+  const [autocomplete, setAutocomplete] = useState<AutocompleteState>({
+    visible: false, query: '', triggerPos: 0, suggestions: [],
+  });
+  const autocompleteRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
   const [frontmatter, setFrontmatter] = useState<Frontmatter>({ tags: [] });
   const [outline, setOutline] = useState<OutlineItem[]>([]);
@@ -178,6 +200,14 @@ export default function NotesPage() {
   useEffect(() => {
     if (session) {
       fetchFiles();
+      // Phase 2: load link index (non-blocking, best-effort)
+      fetch('/api/notes/links')
+        .then(r => r.json())
+        .then(d => {
+          if (d.links) setLinkIndex(d.links);
+          if (d.fileMap) setFileMap(d.fileMap);
+        })
+        .catch(() => {}); // silently fail
     }
   }, [session, fetchFiles]);
 
@@ -452,6 +482,39 @@ export default function NotesPage() {
     });
   };
 
+  // Phase 2: autocomplete selection
+  const selectAutocomplete = useCallback((name: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const { triggerPos } = autocomplete;
+    const before = content.slice(0, triggerPos);
+    const after = content.slice(textarea.selectionStart);
+    const inserted = `[[${name}]]`;
+    setContent(before + inserted + after);
+    setAutocomplete(prev => ({ ...prev, visible: false }));
+    setTimeout(() => {
+      textarea.focus();
+      const pos = triggerPos + inserted.length;
+      textarea.setSelectionRange(pos, pos);
+    }, 0);
+  }, [autocomplete, content]);
+
+  // Phase 2: backlinks for current note
+  const backlinks = useMemo(() => {
+    if (!selectedFile) return [];
+    const currentName = selectedFile.name.replace(/\.md$/, '');
+    return linkIndex
+      .filter(l => l.targetName === currentName)
+      .map(l => ({ id: l.sourceId, name: l.sourceName }))
+      .filter((v, i, a) => a.findIndex(x => x.id === v.id) === i); // dedupe
+  }, [selectedFile, linkIndex]);
+
+  // Phase 2: outbound link count
+  const outboundLinks = useMemo(() => {
+    const matches = content.match(/\[\[[^\]]+\]\]/g) || [];
+    return matches.length;
+  }, [content]);
+
   const wordCount = useMemo(() => countWords(content), [content]);
   const charCount = useMemo(() => countCharacters(content), [content]);
 
@@ -720,12 +783,47 @@ export default function NotesPage() {
               <div className="flex flex-1 overflow-hidden">
                 {activeTab === 'edit' ? (
                   <div className="flex h-full w-full">
-                    {/* Textarea */}
-                    <div className="flex-1 border-r-4 border-black">
+                    {/* Textarea + Autocomplete */}
+                    <div className="relative flex-1 border-r-4 border-black">
+                      {/* Wiki link autocomplete dropdown */}
+                      {autocomplete.visible && (
+                        <div ref={autocompleteRef} className="absolute left-4 top-4 z-50 w-64 border-4 border-black bg-white shadow-[4px_4px_0_black]">
+                          <div className="border-b-2 border-black bg-[#B197FC] px-3 py-1.5 text-xs font-black">
+                            노트 링크 삽입
+                          </div>
+                          {autocomplete.suggestions.map((name) => (
+                            <button
+                              key={name}
+                              onMouseDown={(e) => { e.preventDefault(); selectAutocomplete(name); }}
+                              className="flex w-full items-center gap-2 border-b border-gray-100 px-3 py-2 text-left text-sm font-bold text-black hover:bg-[#FFE500]"
+                            >
+                              <FileText className="h-3 w-3 shrink-0 text-[#B197FC]" />
+                              {name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <textarea
                         ref={textareaRef}
                         value={content}
-                        onChange={(e) => setContent(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setContent(val);
+                          // Wiki link autocomplete: detect [[
+                          const pos = e.target.selectionStart ?? 0;
+                          const textBefore = val.slice(0, pos);
+                          const bracketIdx = textBefore.lastIndexOf('[[');
+                          if (bracketIdx !== -1 && !textBefore.slice(bracketIdx).includes(']]')) {
+                            const query = textBefore.slice(bracketIdx + 2);
+                            const allNames = Object.keys(fileMap);
+                            const suggestions = query
+                              ? allNames.filter(n => n.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+                              : allNames.slice(0, 8);
+                            setAutocomplete({ visible: suggestions.length > 0, query, triggerPos: bracketIdx, suggestions });
+                          } else {
+                            setAutocomplete(prev => ({ ...prev, visible: false }));
+                          }
+                        }}
                         onScroll={handleScroll}
                         placeholder="Start writing your note..."
                         className="h-full w-full resize-none border-0 p-4 font-mono text-sm outline-none"
@@ -829,6 +927,36 @@ export default function NotesPage() {
                     ) : (
                       <p className="text-xs text-gray-400">No tags found</p>
                     )}
+                  </div>
+
+                  {/* Backlinks */}
+                  <div>
+                    <div className="mb-2 flex items-center gap-2">
+                      <ArrowLeftRight className="h-4 w-4 text-[#B197FC]" />
+                      <h3 className="text-xs font-black uppercase tracking-wide text-gray-600">
+                        백링크 ({backlinks.length})
+                      </h3>
+                    </div>
+                    {backlinks.length > 0 ? (
+                      <div className="space-y-1">
+                        {backlinks.map((bl) => (
+                          <button
+                            key={bl.id}
+                            onClick={() => {
+                              const f = files.find(f => f.id === bl.id);
+                              if (f) handleSelectFile(f);
+                            }}
+                            className="flex w-full items-center gap-1 border-2 border-black bg-white px-2 py-1 text-left text-xs font-bold text-black hover:bg-[#FFE500] transition-all"
+                          >
+                            <FileText className="h-3 w-3 shrink-0 text-[#B197FC]" />
+                            <span className="truncate">{bl.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400">이 노트를 참조하는 노트 없음</p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-400">→ 링크 {outboundLinks}개</p>
                   </div>
 
                   {/* Stats */}
