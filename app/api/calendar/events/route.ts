@@ -116,6 +116,59 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PATCH /api/calendar/events?eventId=...  body: { title, description, date, time }
+export async function PATCH(req: NextRequest) {
+  const { token, error, status } = await getToken(req)
+  if (!token) return NextResponse.json({ error }, { status })
+
+  const eventId = req.nextUrl.searchParams.get('eventId')
+  if (!eventId) return NextResponse.json({ error: 'eventId required' }, { status: 400 })
+
+  try {
+    const body = await req.json() as { title?: string; description?: string; date?: string; time?: string }
+    const patchBody: Record<string, unknown> = {}
+    if (body.title !== undefined) patchBody.summary = body.title
+    if (body.description !== undefined) patchBody.description = body.description
+    if (body.date && body.time) {
+      const startDateTime = `${body.date}T${body.time}:00`
+      const [h, m] = body.time.split(':').map(Number)
+      const endM = m + 30
+      const endH = h + Math.floor(endM / 60)
+      const endDateTime = `${body.date}T${String(endH).padStart(2,'0')}:${String(endM % 60).padStart(2,'0')}:00`
+      patchBody.start = { dateTime: startDateTime, timeZone: 'Asia/Seoul' }
+      patchBody.end = { dateTime: endDateTime, timeZone: 'Asia/Seoul' }
+    }
+
+    const res = await fetch(`${CALENDAR_BASE}/${encodeURIComponent(eventId)}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(patchBody),
+    })
+
+    if (!res.ok) {
+      const errBody = await res.text()
+      return NextResponse.json({ error: errBody }, { status: res.status })
+    }
+
+    const updated = await res.json() as {
+      id: string; summary?: string; description?: string;
+      start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string }
+    }
+    return NextResponse.json({
+      event: {
+        id: updated.id,
+        title: updated.summary || '',
+        description: updated.description || '',
+        start: updated.start?.dateTime || updated.start?.date || '',
+        end: updated.end?.dateTime || updated.end?.date || '',
+        allDay: !updated.start?.dateTime,
+      }
+    })
+  } catch {
+    return NextResponse.json({ error: 'Failed to update event' }, { status: 500 })
+  }
+}
+
 // DELETE /api/calendar/events?eventId=...
 export async function DELETE(req: NextRequest) {
   const { token, error, status } = await getToken(req)
