@@ -6,6 +6,7 @@ import { Plus, ChevronLeft, ChevronRight, X, RefreshCw, Trash2, Clock3 } from 'l
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CalEvent = { id: string; title: string; description: string; start: string; end: string; allDay: boolean }
+type CalendarInfo = { id: string; name: string; color: string; enabled: boolean }
 
 type ParsedEvent = CalEvent & {
   startDate: string  // YYYY-MM-DD
@@ -42,22 +43,20 @@ const DATE_H = 26
 
 // ─── Event parsing ─────────────────────────────────────────────────────────────
 
-function parseEvent(ev: CalEvent, colorIdx: number): ParsedEvent {
+function parseEventWithColor(ev: CalEvent, color: string): ParsedEvent {
   if (ev.allDay) {
     const startDate = ev.start.slice(0, 10)
     // Google Calendar: allDay end is exclusive — subtract 1 day
     const endD = new Date(ev.end.slice(0, 10) + 'T00:00:00')
     endD.setDate(endD.getDate() - 1)
-    return { ...ev, startDate, endDate: toDateKey(endD), startTime: '', color: COLORS[colorIdx % COLORS.length] }
+    return { ...ev, startDate, endDate: toDateKey(endD), startTime: '', color }
   }
   const s = new Date(ev.start), e = new Date(ev.end)
-  return {
-    ...ev,
-    startDate: toDateKey(s),
-    endDate: toDateKey(e),
-    startTime: `${pad2(s.getHours())}:${pad2(s.getMinutes())}`,
-    color: COLORS[colorIdx % COLORS.length],
-  }
+  return { ...ev, startDate: toDateKey(s), endDate: toDateKey(e), startTime: `${pad2(s.getHours())}:${pad2(s.getMinutes())}`, color }
+}
+
+function parseEvent(ev: CalEvent, colorIdx: number): ParsedEvent {
+  return parseEventWithColor(ev, COLORS[colorIdx % COLORS.length])
 }
 
 // ─── Lane assignment for spanning events ──────────────────────────────────────
@@ -204,6 +203,7 @@ function WeekRow({ weekStart, currentMonth, events, selectedDate, onDayClick, on
 
 export default function DocumentsPage() {
   const [events, setEvents] = useState<ParsedEvent[]>([])
+  const [calendars, setCalendars] = useState<CalendarInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -240,6 +240,23 @@ export default function DocumentsPage() {
     return weekStarts
   }, [currentDate])
 
+  // Load calendar list once
+  useEffect(() => {
+    fetch('/api/calendar/calendars')
+      .then(r => r.json())
+      .then((d: { calendars?: Array<{ id: string; name: string; color: string; selected: boolean }> }) => {
+        if (d.calendars) {
+          setCalendars(d.calendars.map(c => ({ ...c, enabled: c.selected })))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const enabledCalendarIds = useMemo(
+    () => calendars.filter(c => c.enabled).map(c => c.id),
+    [calendars]
+  )
+
   const fetchEvents = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -247,16 +264,38 @@ export default function DocumentsPage() {
       const y = currentDate.getFullYear(), m = currentDate.getMonth()
       const timeMin = new Date(y, m, 1).toISOString()
       const timeMax = new Date(y, m + 1, 0, 23, 59, 59).toISOString()
-      const res = await fetch(`/api/calendar/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`)
-      if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error || 'Failed')
-      const data = (await res.json()) as { events: CalEvent[] }
-      setEvents(data.events.map((ev, i) => parseEvent(ev, i)))
+
+      const ids = enabledCalendarIds.length > 0 ? enabledCalendarIds : ['primary']
+      const allEvents: CalEvent[] = []
+      const calColorMap = Object.fromEntries(calendars.map(c => [c.id, c.color]))
+
+      await Promise.all(ids.map(async (calId, calIdx) => {
+        try {
+          const res = await fetch(
+            `/api/calendar/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&calendarId=${encodeURIComponent(calId)}`
+          )
+          if (!res.ok) return
+          const data = (await res.json()) as { events: CalEvent[] }
+          // Tag events with their calendar color
+          const calColor = calColorMap[calId] || COLORS[calIdx % COLORS.length]
+          data.events.forEach(ev => {
+            allEvents.push({ ...ev, _calColor: calColor } as CalEvent & { _calColor: string })
+          })
+        } catch { /* skip failed calendar */ }
+      }))
+
+      let colorIdx = 0
+      setEvents(allEvents.map(ev => {
+        const color = (ev as CalEvent & { _calColor?: string })._calColor || COLORS[colorIdx % COLORS.length]
+        colorIdx++
+        return parseEventWithColor(ev, color)
+      }))
     } catch (e) {
       setError(e instanceof Error ? e.message : '불러오기 실패')
     } finally {
       setLoading(false)
     }
-  }, [currentDate])
+  }, [currentDate, enabledCalendarIds, calendars])
 
   useEffect(() => { fetchEvents() }, [fetchEvents])
 
@@ -379,8 +418,30 @@ export default function DocumentsPage() {
         </div>
       )}
 
-      {/* Calendar grid */}
-      <div className="flex-1 overflow-auto px-4 py-2">
+      {/* Body: sidebar + calendar */}
+      <div className="flex-1 overflow-hidden flex">
+        {/* Calendar list sidebar */}
+        {calendars.length > 0 && (
+          <div className="w-44 shrink-0 border-r-4 border-black bg-white overflow-auto p-3 space-y-1">
+            <p className="text-[10px] font-black uppercase text-gray-500 mb-2">내 캘린더</p>
+            {calendars.map(cal => (
+              <button
+                key={cal.id}
+                onClick={() => setCalendars(prev => prev.map(c => c.id === cal.id ? { ...c, enabled: !c.enabled } : c))}
+                className="flex items-center gap-2 w-full text-left hover:bg-gray-50 px-1 py-1 rounded transition-colors"
+              >
+                <span className="w-3 h-3 rounded-sm shrink-0 border border-black/20"
+                  style={{ backgroundColor: cal.enabled ? cal.color : '#e5e7eb' }} />
+                <span className={`text-xs font-bold truncate ${cal.enabled ? 'text-black' : 'text-gray-400'}`}>
+                  {cal.name}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Calendar grid */}
+        <div className="flex-1 overflow-auto px-4 py-2">
         {loading ? (
           <div className="p-8 text-center font-black border-4 border-black bg-white mt-2">
             Google Calendar 로딩 중...
@@ -414,6 +475,7 @@ export default function DocumentsPage() {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       {/* Event detail popup */}

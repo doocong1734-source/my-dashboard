@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDriveAccessToken } from '@/lib/drive-auth'
 
-const CALENDAR_BASE = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
+function calendarBase(calendarId: string) {
+  return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`
+}
 
 async function getToken(req: NextRequest) {
   const auth = await getDriveAccessToken(req, ['drive.read'])
@@ -17,9 +19,10 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const timeMin = searchParams.get('timeMin')
   const timeMax = searchParams.get('timeMax')
+  const calendarId = searchParams.get('calendarId') || 'primary'
 
   const params = new URLSearchParams({
-    maxResults: '100',
+    maxResults: '250',
     singleEvents: 'true',
     orderBy: 'startTime',
   })
@@ -27,7 +30,7 @@ export async function GET(req: NextRequest) {
   if (timeMax) params.set('timeMax', timeMax)
 
   try {
-    const res = await fetch(`${CALENDAR_BASE}?${params}`, {
+    const res = await fetch(`${calendarBase(calendarId)}?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) {
