@@ -122,10 +122,7 @@ export default function GraphView({
       .map((link) => {
         const targetId = fileMap[link.targetName];
         if (!targetId || !nodeMap.has(link.sourceId)) return null;
-        return {
-          source: link.sourceId,
-          target: targetId,
-        };
+        return { source: link.sourceId, target: targetId } as GraphLink;
       })
       .filter((link): link is GraphLink => link !== null);
 

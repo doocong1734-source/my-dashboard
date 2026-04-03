@@ -109,10 +109,10 @@ function parseInlineHashtags(content: string): string[] {
 export async function GET(req: NextRequest) {
   const authResult = await getDriveAccessToken(req, ['drive.read']);
   
-  if (!authResult.ok || !authResult.accessToken) {
+  if (!authResult.ok) {
     return NextResponse.json(
-      { error: authResult.error || 'Unauthorized' },
-      { status: authResult.status || 401 }
+      { error: authResult.error },
+      { status: authResult.status }
     );
   }
   
@@ -125,7 +125,7 @@ export async function GET(req: NextRequest) {
   
   do {
     try {
-      const response = await drive.files.list({
+      const response: { data: drive_v3.Schema$FileList } = await drive.files.list({
         q: "name ends with '.md' and trashed = false",
         fields: 'nextPageToken, files(id, name, mimeType)',
         pageSize: 100,
