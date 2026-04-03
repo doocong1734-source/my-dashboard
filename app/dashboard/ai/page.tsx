@@ -1,274 +1,410 @@
-'use client';
+'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { Send, Loader2, Trash2, Copy, Bot, User, StopCircle } from 'lucide-react';
-import MarkdownRenderer from '@/components/MarkdownRenderer';
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSession } from 'next-auth/react'
+import MarkdownRenderer from '@/components/MarkdownRenderer'
 
 interface Message {
-  role: 'user' | 'assistant';
-  content: string;
+  id: string
+  role: 'user' | 'assistant'
+  content: string
 }
 
-const SYSTEM_PROMPTS: { label: string; value: string }[] = [
-  { label: '일반', value: '당신은 도움이 되는 AI 어시스턴트입니다. 한국어로 답변하세요.' },
-  { label: '코딩', value: '당신은 전문 소프트웨어 개발자입니다. 코드 질문에 명확하고 실용적인 답변을 한국어로 제공하세요.' },
-  { label: '글쓰기', value: '당신은 전문 작가이자 편집자입니다. 글쓰기와 편집을 도와주세요. 한국어로 답변하세요.' },
-  { label: '번역', value: '당신은 전문 번역가입니다. 요청한 언어로 정확하게 번역하고, 번역 의도와 뉘앙스를 설명해주세요.' },
-  { label: '분석', value: '당신은 분석 전문가입니다. 데이터와 정보를 깊이 분석하고 인사이트를 도출해주세요. 한국어로 답변하세요.' },
-];
+interface ChatSession {
+  id: string
+  name: string
+  modifiedTime?: string
+}
 
-export default function AIPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedPrompt, setSelectedPrompt] = useState(0);
-  const [streamingText, setStreamingText] = useState('');
-  const abortRef = useRef<AbortController | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+const SYSTEM_PRESETS = {
+  일반: 'You are a helpful AI assistant. Respond in Korean unless asked otherwise.',
+  코딩: 'You are an expert programming assistant. Provide clean, well-commented code. Respond in Korean.',
+  글쓰기: 'You are a skilled writer. Help with creative writing, essays, and content creation in Korean.',
+  번역: 'You are a professional translator. Provide accurate translations while preserving meaning and tone.',
+  분석: 'You are a data analysis expert. Provide clear insights and structured analysis in Korean.'
+}
+
+export default function AIChatPage() {
+  const { data: session } = useSession()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [selectedPreset, setSelectedPreset] = useState<keyof typeof SYSTEM_PRESETS>('일반')
+  const [abortController, setAbortController] = useState<AbortController | null>(null)
+  const [streamingContent, setStreamingContent] = useState('')
+  const [isTyping, setIsTyping] = useState(false)
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [vaultFolderId, setVaultFolderId] = useState<string | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (status === 'unauthenticated') router.push('/api/auth/signin');
-  }, [status, router]);
+    const saved = localStorage.getItem('vault-folder-id')
+    if (saved) setVaultFolderId(saved)
+  }, [])
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingText]);
-
-  const handleStop = useCallback(() => {
-    abortRef.current?.abort();
-    setIsLoading(false);
-    if (streamingText) {
-      setMessages(prev => [...prev, { role: 'assistant', content: streamingText }]);
-      setStreamingText('');
+  const loadSessions = useCallback(async () => {
+    if (!vaultFolderId) return
+    setSessionsLoading(true)
+    try {
+      const res = await fetch(`/api/ai/sessions?vaultFolderId=${vaultFolderId}`)
+      const data = await res.json()
+      setSessions(data.sessions || [])
+    } finally {
+      setSessionsLoading(false)
     }
-  }, [streamingText]);
+  }, [vaultFolderId])
 
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || isLoading) return;
+  useEffect(() => {
+    if (vaultFolderId) {
+      loadSessions()
+    }
+  }, [vaultFolderId, loadSessions])
 
-    const userMsg: Message = { role: 'user', content: input.trim() };
-    const updatedMessages = [...messages, userMsg];
-    setMessages(updatedMessages);
-    setInput('');
-    setIsLoading(true);
-    setStreamingText('');
+  const saveSession = async (msgs: Message[]) => {
+    if (!vaultFolderId || msgs.length === 0) return
+    const title = msgs[0].content.slice(0, 30)
+    try {
+      const res = await fetch('/api/ai/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vaultFolderId, sessionId: currentSessionId || undefined, title, messages: msgs })
+      })
+      const data = await res.json()
+      if (data.sessionId) {
+        setCurrentSessionId(data.sessionId)
+        loadSessions()
+      }
+    } catch (error) {
+      console.error('Failed to save session:', error)
+    }
+  }
 
-    abortRef.current = new AbortController();
+  const loadSession = async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/ai/sessions?sessionId=${sessionId}`)
+      const data = await res.json()
+      if (data.messages) {
+        setMessages(data.messages)
+        setCurrentSessionId(sessionId)
+      }
+    } catch (error) {
+      console.error('Failed to load session:', error)
+    }
+  }
+
+  const deleteSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation()
+    if (!vaultFolderId) return
+    try {
+      await fetch('/api/ai/sessions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vaultFolderId, sessionId })
+      })
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId(null)
+        setMessages([])
+      }
+      loadSessions()
+    } catch (error) {
+      console.error('Failed to delete session:', error)
+    }
+  }
+
+  const startNewChat = () => {
+    setMessages([])
+    setCurrentSessionId(null)
+    setInput('')
+  }
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, streamingContent])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim() || isLoading) return
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input.trim()
+    }
+
+    const newMessages = [...messages, userMessage]
+    setMessages(newMessages)
+    setInput('')
+    setIsLoading(true)
+    setIsTyping(true)
+    setStreamingContent('')
+
+    const controller = new AbortController()
+    setAbortController(controller)
 
     try {
-      const res = await fetch('/api/ai/chat', {
+      const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: updatedMessages,
-          systemPrompt: SYSTEM_PROMPTS[selectedPrompt].value,
+          messages: newMessages,
+          systemPrompt: SYSTEM_PRESETS[selectedPreset]
         }),
-        signal: abortRef.current.signal,
-      });
+        signal: controller.signal
+      })
 
-      if (!res.ok || !res.body) throw new Error('AI 응답 실패');
+      if (!response.ok) throw new Error('Failed to get response')
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = '';
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      let fullContent = ''
+      let buffer = ''
 
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const { done, value } = await reader!.read()
+        if (done) break
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') continue;
-          try {
-            const parsed = JSON.parse(data);
-            // Anthropic SSE format
-            if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-              accumulated += parsed.delta.text;
-              setStreamingText(accumulated);
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
+
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                fullContent += parsed.delta.text
+                setStreamingContent(fullContent)
+              } else if (parsed.content || parsed.text) {
+                const text = parsed.content || parsed.text
+                fullContent += text
+                setStreamingContent(fullContent)
+              }
+            } catch {
+              fullContent += data
+              setStreamingContent(fullContent)
             }
-          } catch {}
+          }
         }
       }
 
-      setMessages(prev => [...prev, { role: 'assistant', content: accumulated }]);
-      setStreamingText('');
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setMessages(prev => [...prev, { role: 'assistant', content: '오류가 발생했습니다. 다시 시도해주세요.' }]);
+      if (buffer) {
+        if (buffer.startsWith('data: ')) {
+          const data = buffer.slice(6)
+          if (data !== '[DONE]') {
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                fullContent += parsed.delta.text
+              } else if (parsed.content || parsed.text) {
+                fullContent += parsed.content || parsed.text
+              }
+            } catch {
+              fullContent += data
+            }
+          }
+        } else {
+          fullContent += buffer
+        }
       }
-      setStreamingText('');
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: fullContent
+      }
+
+      const finalMessages = [...newMessages, assistantMessage]
+      setMessages(finalMessages)
+      await saveSession(finalMessages)
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') {
+        console.error('Error:', error)
+      }
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
+      setIsTyping(false)
+      setStreamingContent('')
+      setAbortController(null)
     }
-  }, [input, isLoading, messages, selectedPrompt]);
+  }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  const stopGeneration = () => {
+    abortController?.abort()
+    if (streamingContent) {
+      const assistantMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: streamingContent
+      }
+      const finalMessages = [...messages, assistantMessage]
+      setMessages(finalMessages)
+      saveSession(finalMessages)
     }
-  };
+    setStreamingContent('')
+    setIsLoading(false)
+    setIsTyping(false)
+  }
 
-  if (status === 'loading') return (
-    <div className="flex h-screen items-center justify-center">
-      <Loader2 className="h-10 w-10 animate-spin" />
-    </div>
-  );
+  const copyMessage = (content: string) => {
+    navigator.clipboard.writeText(content)
+  }
+
+  const clearChat = () => {
+    setMessages([])
+    setStreamingContent('')
+    setCurrentSessionId(null)
+  }
 
   return (
-    <div className="flex h-screen flex-col bg-white">
-      {/* Header */}
-      <header className="flex shrink-0 items-center justify-between border-b-4 border-black bg-[#FFE500] px-6 py-4">
-        <div className="flex items-center gap-3">
-          <Bot className="h-6 w-6" strokeWidth={2.5} />
-          <h1 className="text-2xl font-black uppercase tracking-tight">AI CHAT</h1>
-          <span className="border-2 border-black bg-white px-2 py-0.5 text-xs font-black">MiniMax M2.7</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* System prompt selector */}
-          <div className="flex border-2 border-black overflow-hidden">
-            {SYSTEM_PROMPTS.map((p, i) => (
-              <button
-                key={i}
-                onClick={() => setSelectedPrompt(i)}
-                className={`px-3 py-1.5 text-xs font-black transition-all ${
-                  selectedPrompt === i ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+    <div className="flex h-screen bg-white">
+      <div className="w-60 border-r-4 border-black bg-gray-50 flex flex-col">
+        <div className="p-4 border-b-4 border-black flex items-center justify-between">
+          <h2 className="font-bold text-lg">SESSIONS</h2>
           <button
-            onClick={() => { setMessages([]); setStreamingText(''); }}
-            className="flex items-center gap-1 border-2 border-black bg-white px-3 py-1.5 text-xs font-black hover:bg-[#FF6B6B] transition-all"
+            onClick={startNewChat}
+            className="px-3 py-1 bg-[#FFE500] border-2 border-black font-bold text-sm hover:bg-yellow-300 transition-colors"
           >
-            <Trash2 className="h-3 w-3" /> 초기화
+            + 새 대화
           </button>
         </div>
-      </header>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && !streamingText && (
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center">
-              <Bot className="mx-auto h-16 w-16 text-gray-200" />
-              <p className="mt-4 text-lg font-black text-gray-300 uppercase">MiniMax M2.7</p>
-              <p className="text-sm text-gray-400 mt-1">메시지를 입력해서 대화를 시작하세요</p>
-              <div className="mt-4 flex flex-wrap gap-2 justify-center max-w-md">
-                {['코드 리뷰해줘', '요약해줘', '번역해줘', '아이디어 제안'].map(s => (
-                  <button key={s} onClick={() => setInput(s)}
-                    className="border-2 border-black px-3 py-1.5 text-xs font-bold hover:bg-[#FFE500] transition-all">
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-            <div className={`flex-shrink-0 w-8 h-8 border-2 border-black flex items-center justify-center font-black text-xs ${
-              msg.role === 'user' ? 'bg-[#FFE500]' : 'bg-[#B197FC]'
-            }`}>
-              {msg.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-            </div>
-            <div className={`group relative max-w-[75%] border-2 border-black p-3 shadow-[2px_2px_0_black] ${
-              msg.role === 'user' ? 'bg-[#FFE500]' : 'bg-white'
-            }`}>
-              {msg.role === 'assistant' ? (
-                <div className="prose prose-sm max-w-none">
-                  <MarkdownRenderer content={msg.content} />
-                </div>
-              ) : (
-                <p className="whitespace-pre-wrap text-sm font-bold">{msg.content}</p>
-              )}
-              <button
-                onClick={() => navigator.clipboard.writeText(msg.content)}
-                className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 border border-black p-1 bg-white hover:bg-gray-100 transition-all"
-                title="복사"
-              >
-                <Copy className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-        ))}
-
-        {/* Streaming */}
-        {streamingText && (
-          <div className="flex gap-3">
-            <div className="flex-shrink-0 w-8 h-8 border-2 border-black bg-[#B197FC] flex items-center justify-center">
-              <Bot className="h-4 w-4" />
-            </div>
-            <div className="max-w-[75%] border-2 border-black bg-white p-3 shadow-[2px_2px_0_black]">
-              <div className="prose prose-sm max-w-none">
-                <MarkdownRenderer content={streamingText} />
-              </div>
-              <span className="inline-block w-1.5 h-4 bg-black animate-pulse ml-0.5" />
-            </div>
-          </div>
-        )}
-
-        {isLoading && !streamingText && (
-          <div className="flex gap-3">
-            <div className="w-8 h-8 border-2 border-black bg-[#B197FC] flex items-center justify-center">
-              <Bot className="h-4 w-4" />
-            </div>
-            <div className="border-2 border-black bg-white p-3 shadow-[2px_2px_0_black]">
-              <Loader2 className="h-4 w-4 animate-spin" />
-            </div>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input */}
-      <div className="shrink-0 border-t-4 border-black bg-gray-50 p-4">
-        <div className="flex gap-2">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="메시지 입력... (Enter 전송, Shift+Enter 줄바꿈)"
-            rows={2}
-            className="flex-1 resize-none border-4 border-black bg-white px-3 py-2 font-mono text-sm outline-none focus:shadow-[4px_4px_0_black] transition-all"
-          />
-          {isLoading ? (
-            <button
-              onClick={handleStop}
-              className="flex items-center gap-2 border-4 border-black bg-[#FF6B6B] px-4 py-2 font-black text-black shadow-[4px_4px_0_black] hover:shadow-none transition-all"
-            >
-              <StopCircle className="h-5 w-5" />
-              중지
-            </button>
+        
+        <div className="flex-1 overflow-y-auto">
+          {sessionsLoading ? (
+            <div className="p-4 text-center text-gray-500">Loading...</div>
+          ) : sessions.length === 0 ? (
+            <div className="p-4 text-center text-gray-400">No sessions yet</div>
           ) : (
-            <button
-              onClick={handleSend}
-              disabled={!input.trim()}
-              className="flex items-center gap-2 border-4 border-black bg-black px-4 py-2 font-black shadow-[4px_4px_0_black] hover:shadow-none transition-all disabled:opacity-40"
-              style={{ color: '#fff' }}
-            >
-              <Send className="h-5 w-5" />
-              전송
-            </button>
+            sessions.map((s) => (
+              <div
+                key={s.id}
+                onClick={() => loadSession(s.id)}
+                className={`p-3 border-b-2 border-gray-200 cursor-pointer hover:bg-yellow-50 transition-colors relative group ${
+                  currentSessionId === s.id ? 'bg-[#FFE500]' : ''
+                }`}
+              >
+                <div className="font-medium text-sm pr-8 truncate">{s.name}</div>
+                {s.modifiedTime && (
+                  <div className="text-xs text-gray-400 mt-1">
+                    {new Date(s.modifiedTime).toLocaleDateString()}
+                  </div>
+                )}
+                <button
+                  onClick={(e) => deleteSession(e, s.id)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity w-6 h-6 flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
+            ))
           )}
         </div>
-        <p className="mt-1 text-xs text-gray-400 font-bold">
-          {messages.length > 0 && `대화 ${Math.ceil(messages.length / 2)}턴 · `}모델: MiniMax M2.7
-        </p>
+      </div>
+
+      <div className="flex-1 flex flex-col">
+        <div className="p-4 border-b-2 border-gray-200 flex gap-2 flex-wrap">
+          {(Object.keys(SYSTEM_PRESETS) as Array<keyof typeof SYSTEM_PRESETS>).map((preset) => (
+            <button
+              key={preset}
+              onClick={() => setSelectedPreset(preset)}
+              className={`px-4 py-2 border-2 border-black font-medium transition-all ${
+                selectedPreset === preset
+                  ? 'bg-black text-white'
+                  : 'bg-white hover:bg-gray-100'
+              }`}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`p-4 rounded-lg border-2 border-black ${
+                message.role === 'user'
+                  ? 'bg-blue-50 ml-12'
+                  : 'bg-white mr-12'
+              }`}
+            >
+              <div className="font-bold mb-2">
+                {message.role === 'user' ? 'You' : 'Assistant'}
+              </div>
+              <MarkdownRenderer content={message.content} />
+              
+              {message.role === 'assistant' && (
+                <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
+                  <button
+                    onClick={() => copyMessage(message.content)}
+                    className="text-sm text-gray-500 hover:text-black"
+                  >
+                    Copy
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {streamingContent && (
+            <div className="p-4 rounded-lg border-2 border-black bg-white mr-12">
+              <div className="font-bold mb-2">Assistant</div>
+              <MarkdownRenderer content={streamingContent} />
+              {isTyping && (
+                <span className="inline-block w-2 h-4 bg-black ml-1 animate-pulse"></span>
+              )}
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        <div className="p-4 border-t-4 border-black bg-white">
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Type your message..."
+              className="flex-1 p-3 border-2 border-black resize-none h-20 focus:outline-none focus:border-4"
+              disabled={isLoading}
+            />
+            <div className="flex flex-col gap-2">
+              {isLoading ? (
+                <button
+                  type="button"
+                  onClick={stopGeneration}
+                  className="px-6 py-3 bg-red-500 text-white font-bold border-2 border-black hover:bg-red-600 transition-colors"
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim()}
+                  className="px-6 py-3 bg-[#FFE500] font-bold border-2 border-black disabled:opacity-50 hover:bg-yellow-300 transition-colors"
+                >
+                  Send
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={clearChat}
+                className="px-6 py-3 bg-gray-200 font-bold border-2 border-black hover:bg-gray-300 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
-  );
+  )
 }
