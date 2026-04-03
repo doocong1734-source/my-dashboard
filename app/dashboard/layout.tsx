@@ -1,12 +1,13 @@
 import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
-import { LayoutDashboard, CalendarDays, BriefcaseBusiness, Settings, HardDrive, WandSparkles, NotebookPen } from 'lucide-react'
+import { LayoutDashboard, CalendarDays, BriefcaseBusiness, Settings, HardDrive, WandSparkles, NotebookPen, Bot } from 'lucide-react'
 import { authOptions } from '@/lib/auth'
 
 const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { href: '/dashboard/notes', label: 'Notes', icon: NotebookPen },
+  { href: '/dashboard/ai', label: 'AI Chat', icon: Bot },
   { href: '/dashboard/documents', label: '스케줄', icon: CalendarDays },
   { href: '/dashboard/drive', label: 'Google Drive', icon: HardDrive },
   { href: '/dashboard/jobs', label: 'Jobs', icon: BriefcaseBusiness },
