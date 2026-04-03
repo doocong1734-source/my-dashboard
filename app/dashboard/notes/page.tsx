@@ -180,6 +180,8 @@ export default function NotesPage() {
   // Phase 5: Graph view
   const [showGraph, setShowGraph] = useState(false);
   const [showAIPanel, setShowAIPanel] = useState(false);
+  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   // Phase 6: Template system
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templates, setTemplates] = useState<{id: string; name: string; content: string}[]>([]);
@@ -349,6 +351,21 @@ export default function NotesPage() {
       return next;
     });
   }, []);
+
+  const toggleFileSelection = (fileId: string) => {
+    setSelectedFileIds(prev => prev.includes(fileId) ? prev.filter(id => id !== fileId) : [...prev, fileId]);
+  };
+  const selectAll = () => setSelectedFileIds(filteredFiles.map(f => f.id));
+  const clearSelection = () => { setSelectedFileIds([]); setIsMultiSelectMode(false); };
+  const handleBulkDelete = async () => {
+    if (selectedFileIds.length === 0) return;
+    if (!confirm(`${selectedFileIds.length}개 파일을 삭제하시겠습니까?`)) return;
+    for (const fileId of selectedFileIds) {
+      await fetch('/api/drive/delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileId }) });
+    }
+    clearSelection();
+    fetchFiles(currentFolderId ?? vaultFolderId ?? undefined);
+  };
 
   const handleUploadFiles = async (fileList: FileList) => {
     const folderId = currentFolderId ?? vaultFolderId ?? undefined;
@@ -962,6 +979,21 @@ export default function NotesPage() {
                   </div>
                 </div>
               ) : (
+                <>
+                {(isMultiSelectMode || selectedFileIds.length > 0) && (
+                  <div className="border-b-2 border-black bg-[#FFE500] px-3 py-2 flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedFileIds.length === filteredFiles.length && filteredFiles.length > 0}
+                      ref={(el) => { if (el) el.indeterminate = selectedFileIds.length > 0 && selectedFileIds.length < filteredFiles.length; }}
+                      onChange={() => selectedFileIds.length === filteredFiles.length ? clearSelection() : selectAll()}
+                      className="h-4 w-4 cursor-pointer"
+                    />
+                    <span className="text-xs font-black">{selectedFileIds.length}개 선택</span>
+                    <button onClick={handleBulkDelete} className="ml-auto border-2 border-black bg-red-500 px-2 py-0.5 text-xs font-black text-white hover:bg-red-600">삭제</button>
+                    <button onClick={clearSelection} className="border-2 border-black bg-white px-2 py-0.5 text-xs font-black hover:bg-gray-100">취소</button>
+                  </div>
+                )}
                 <ul className="p-2">
                   {/* Pinned notes */}
                   {pinnedFileIds.length > 0 && files.some(f => pinnedFileIds.includes(f.id)) && (
@@ -1057,16 +1089,32 @@ export default function NotesPage() {
                           draggable
                           onDragStart={() => setDragFileId(file.id)}
                           onDragEnd={() => { setDragFileId(null); setDropTargetId(null); }}
-                          onClick={() => handleSelectFile(file)}
+                          onClick={(e) => {
+                            if (e.shiftKey || isMultiSelectMode) {
+                              e.preventDefault();
+                              setIsMultiSelectMode(true);
+                              toggleFileSelection(file.id);
+                            } else {
+                              handleSelectFile(file);
+                            }
+                          }}
                           onContextMenu={(e) => { e.preventDefault(); setContextMenu({ fileId: file.id, fileName: file.name, x: e.clientX, y: e.clientY }); }}
                           className={`mb-1 flex w-full items-start gap-2 border-4 p-3 text-left transition-all ${
                             dragFileId === file.id ? 'opacity-50 ' : ''
                           }${
-                            selectedFile?.id === file.id
+                            selectedFileIds.includes(file.id)
+                              ? 'border-black bg-blue-100 shadow-[2px_2px_0_black]'
+                              : selectedFile?.id === file.id
                               ? 'border-black bg-[#FFE500] shadow-[2px_2px_0_black]'
                               : 'border-transparent bg-white shadow-[2px_2px_0_black] hover:border-black'
                           }`}
                         >
+                          {(isMultiSelectMode || selectedFileIds.includes(file.id)) && (
+                            <input type="checkbox" checked={selectedFileIds.includes(file.id)}
+                              onChange={() => toggleFileSelection(file.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-4 w-4 mt-0.5 shrink-0 cursor-pointer" />
+                          )}
                           <FileText className={`mt-0.5 h-4 w-4 shrink-0 ${file.name.endsWith('.md') ? 'text-[#B197FC]' : 'text-[#74C0FC]'}`} />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-bold text-black">
@@ -1081,6 +1129,7 @@ export default function NotesPage() {
                     ))
                   )}
                 </ul>
+                </>
               )}
             </div>
 
