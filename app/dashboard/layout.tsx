@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { LayoutDashboard, CalendarDays, BriefcaseBusiness, Settings, HardDrive, WandSparkles, NotebookPen, Bot } from 'lucide-react'
 import { authOptions } from '@/lib/auth'
+import { SignOutButton } from '@/components/SignOutButton'
 
 const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
@@ -41,10 +42,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </Link>
           ))}
         </nav>
-        <div className="p-3 border-t-4 border-black">
+        <div className="p-3 border-t-4 border-black space-y-2">
           <div className="bg-black text-[#FFE500] text-xs font-black px-3 py-2 text-center uppercase">
             ONLINE
           </div>
+          <SignOutButton />
         </div>
       </aside>
 
