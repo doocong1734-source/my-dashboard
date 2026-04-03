@@ -33,11 +33,13 @@ import {
   ArrowLeftRight,
   GitFork,
   Calendar,
-  Pencil
+  Pencil,
+  Bot
 } from 'lucide-react';
 import 'highlight.js/styles/github.css';
 import GraphView from './GraphView';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+import NoteAIPanel from '@/components/NoteAIPanel';
 
 interface DriveFile {
   id: string;
@@ -176,6 +178,7 @@ export default function NotesPage() {
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   // Phase 5: Graph view
   const [showGraph, setShowGraph] = useState(false);
+  const [showAIPanel, setShowAIPanel] = useState(false);
   // Phase 6: Template system
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templates, setTemplates] = useState<{id: string; name: string; content: string}[]>([]);
@@ -754,6 +757,14 @@ export default function NotesPage() {
           >
             <GitFork className="h-4 w-4" />
             그래프
+          </button>
+          <button
+            onClick={() => setShowAIPanel(p => !p)}
+            className={`flex items-center gap-2 border-4 border-black px-4 py-2 font-black text-black shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black] ${showAIPanel ? 'bg-[#FFE500]' : 'bg-white'}`}
+            title="AI 어시스턴트"
+          >
+            <Bot className="h-4 w-4" />
+            AI
           </button>
         </div>
 
@@ -1614,6 +1625,15 @@ export default function NotesPage() {
         </div>
       )}
       {contextMenu && <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />}
+
+      {/* AI Panel */}
+      <NoteAIPanel
+        isOpen={showAIPanel}
+        onClose={() => setShowAIPanel(false)}
+        noteTitle={selectedFile?.name.replace(/\.md$/, '') ?? ''}
+        noteContent={content}
+        noteFileId={selectedFile?.id ?? null}
+      />
 
       {/* Phase 5: Graph View */}
       {showGraph && (
