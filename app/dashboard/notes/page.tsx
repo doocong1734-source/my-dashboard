@@ -30,9 +30,11 @@ import {
   Trash2,
   File,
   ChevronRight,
-  ArrowLeftRight
+  ArrowLeftRight,
+  GitFork
 } from 'lucide-react';
 import 'highlight.js/styles/github.css';
+import GraphView from './GraphView';
 
 interface DriveFile {
   id: string;
@@ -166,6 +168,8 @@ export default function NotesPage() {
   const [tagIndex, setTagIndex] = useState<{tag: string; noteIds: string[]; frequency: number}[]>([]);
   const [noteTagMap, setNoteTagMap] = useState<Record<string, string[]>>({});
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  // Phase 5: Graph view
+  const [showGraph, setShowGraph] = useState(false);
   // Phase 4: Full-text search
   const [fullSearchQuery, setFullSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{fileId: string; fileName: string; snippet: string; matchType: string; matchCount: number}[]>([]);
@@ -584,6 +588,14 @@ export default function NotesPage() {
           >
             <Plus className="h-4 w-4" />
             New Note
+          </button>
+          <button
+            onClick={() => setShowGraph(true)}
+            className="flex items-center gap-2 border-4 border-black bg-[#B197FC] px-4 py-2 font-black text-black shadow-[4px_4px_0_black] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_black]"
+            title="그래프 뷰"
+          >
+            <GitFork className="h-4 w-4" />
+            그래프
           </button>
         </div>
 
@@ -1079,3 +1091,72 @@ export default function NotesPage() {
                       <List className="h-4 w-4 text-[#B197FC]" />
                       <h3 className="text-xs font-black uppercase tracking-wide text-gray-600">
                         Statistics
+                      </h3>
+                    </div>
+                    <div className="space-y-1 text-xs font-bold text-gray-600">
+                      <div className="flex justify-between border border-gray-200 px-2 py-1">
+                        <span>단어</span><span className="font-black">{wordCount}</span>
+                      </div>
+                      <div className="flex justify-between border border-gray-200 px-2 py-1">
+                        <span>글자</span><span className="font-black">{charCount}</span>
+                      </div>
+                      {lastSaved && (
+                        <div className="flex items-center gap-1 border border-gray-200 px-2 py-1">
+                          <Clock className="h-3 w-3" />
+                          <span className="text-[10px]">{lastSaved.toLocaleTimeString('ko-KR')}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Outline */}
+                  {outline.length > 0 && (
+                    <div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <List className="h-4 w-4 text-[#B197FC]" />
+                        <h3 className="text-xs font-black uppercase tracking-wide text-gray-600">목차</h3>
+                      </div>
+                      <div className="space-y-1">
+                        {outline.map((item, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => scrollToHeading(item.id)}
+                            className="flex w-full items-start text-left text-xs font-bold text-gray-600 hover:text-black"
+                            style={{ paddingLeft: `${(item.level - 1) * 8}px` }}
+                          >
+                            <ChevronRight className="mr-1 h-3 w-3 shrink-0 mt-0.5" />
+                            <span className="truncate">{item.text}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center p-8 text-center">
+                  <p className="text-xs text-gray-400">노트를 선택하면<br />메타데이터가 표시됩니다</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      {/* Phase 5: Graph View */}
+      {showGraph && (
+        <GraphView
+          files={files.map(f => ({ id: f.id, name: f.name.replace(/\.md$/, '') }))}
+          links={linkIndex}
+          fileMap={fileMap}
+          selectedFileId={selectedFile?.id ?? null}
+          onSelectNode={(fileId) => {
+            const f = files.find(f => f.id === fileId);
+            if (f) handleSelectFile(f);
+            setShowGraph(false);
+          }}
+          onClose={() => setShowGraph(false)}
+        />
+      )}
+    </div>
+  );
+}
