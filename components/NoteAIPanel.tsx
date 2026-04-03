@@ -11,6 +11,7 @@ interface Message {
 interface NoteAIPanelProps {
   isOpen: boolean
   onClose: () => void
+  onOpen: () => void
   noteTitle: string
   noteContent: string
   noteFileId: string | null
@@ -21,6 +22,7 @@ const SYSTEM_PROMPT = '당신은 노트 작성을 도와주는 AI 어시스턴�
 export default function NoteAIPanel({
   isOpen,
   onClose,
+  onOpen,
   noteTitle,
   noteContent,
   noteFileId,
@@ -175,7 +177,7 @@ export default function NoteAIPanel({
   if (!isOpen) {
     return (
       <button
-        onClick={onClose}
+        onClick={onOpen}
         className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-400 p-0 shadow-[4px_4px_0_black] transition-all hover:shadow-[6px_6px_0_black] hover:-translate-x-[2px] hover:-translate-y-[2px] border-2 border-black"
       >
         <Bot className="h-7 w-7 text-black" />

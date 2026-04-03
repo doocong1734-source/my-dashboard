@@ -1630,6 +1630,7 @@ export default function NotesPage() {
       <NoteAIPanel
         isOpen={showAIPanel}
         onClose={() => setShowAIPanel(false)}
+        onOpen={() => setShowAIPanel(true)}
         noteTitle={selectedFile?.name.replace(/\.md$/, '') ?? ''}
         noteContent={content}
         noteFileId={selectedFile?.id ?? null}
