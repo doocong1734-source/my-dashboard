@@ -885,7 +885,7 @@ export default function NotesPage() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel - File List: hidden on mobile when a file is selected */}
-        <aside className={`w-60 shrink-0 border-r-4 border-black bg-gray-50 flex flex-col ${selectedFile ? 'hidden md:flex' : ''}`}>
+        <aside className={`w-60 shrink-0 border-r-4 border-black bg-gray-50 flex-col ${selectedFile ? 'hidden md:flex' : 'flex'}`}>
 
           <div className="flex h-full flex-col">
             <div className="border-b-4 border-black bg-gray-100 px-3 py-2 flex items-center justify-between">
