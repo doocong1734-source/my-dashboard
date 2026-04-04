@@ -242,7 +242,12 @@ export default function NotesPage() {
     try {
       const url = folderId ? `/api/drive/files?folderId=${folderId}` : '/api/drive/files';
       const response = await fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch files');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        const msg = errData?.error || `HTTP ${response.status}`;
+        if (response.status === 401) throw new Error('로그인이 필요합니다. 로그아웃 후 재로그인해주세요.');
+        throw new Error(`Drive 오류: ${msg}`);
+      }
       const data = await response.json();
       const all: DriveFile[] = data.files || [];
       setFolders(all.filter(f => f.mimeType === 'application/vnd.google-apps.folder'));
