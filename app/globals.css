@@ -172,17 +172,23 @@ body {
 
 /* ── END Galaxy Theme ──────────────────────────── */
 
-.dashboard-theme,
+/* 본문 텍스트: 일반 굵기 */
 .dashboard-theme p,
 .dashboard-theme span,
 .dashboard-theme small,
-.dashboard-theme label,
-.dashboard-theme a,
 .dashboard-theme li,
 .dashboard-theme td,
 .dashboard-theme th,
+.dashboard-theme textarea {
+  color: #000000;
+  font-weight: 400;
+}
+
+/* UI 요소: 굵게 유지 */
+.dashboard-theme,
+.dashboard-theme label,
+.dashboard-theme a,
 .dashboard-theme input,
-.dashboard-theme textarea,
 .dashboard-theme select,
 .dashboard-theme button,
 .dashboard-theme h1,
