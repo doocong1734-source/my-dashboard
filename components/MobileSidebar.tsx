@@ -28,7 +28,7 @@ export default function MobileSidebar() {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-56 bg-white border-r-4 border-black flex-col shrink-0">
+      <aside className="hidden lg:flex w-56 bg-white border-r-4 border-black flex-col shrink-0">
         <div className="p-5 border-b-4 border-black bg-[#FFE500]">
           <h1 className="text-xl font-black text-black uppercase tracking-tight">MY DASHBOARD</h1>
           <p className="text-xs font-bold text-black mt-0.5">AI AGENT CONTROL</p>
@@ -53,7 +53,7 @@ export default function MobileSidebar() {
       </aside>
 
       {/* Mobile: top bar + slide-out drawer */}
-      <div className="md:hidden">
+      <div className="lg:hidden">
         {/* Top bar */}
         <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-[#FFE500] border-b-4 border-black px-4 py-3">
           <span className="font-black text-black text-sm uppercase tracking-tight">MY DASHBOARD</span>

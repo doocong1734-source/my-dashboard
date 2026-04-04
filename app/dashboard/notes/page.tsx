@@ -885,7 +885,7 @@ export default function NotesPage() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel - File List: hidden on mobile when a file is selected */}
-        <aside className={`w-60 shrink-0 border-r-4 border-black bg-gray-50 flex-col ${selectedFile ? 'hidden md:flex' : 'flex'}`}>
+        <aside className={`w-60 shrink-0 border-r-4 border-black bg-gray-50 flex-col ${selectedFile ? 'hidden lg:flex' : 'flex'}`}>
 
           <div className="flex h-full flex-col">
             <div className="border-b-4 border-black bg-gray-100 px-3 py-2 flex items-center justify-between">
@@ -1199,7 +1199,7 @@ export default function NotesPage() {
             <div className="flex flex-1 flex-col overflow-hidden">
               <div className="flex shrink-0 items-center justify-between border-b-4 border-black bg-[#FFE500] px-4 py-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  <button onClick={() => setSelectedFile(null)} className="md:hidden shrink-0 border-2 border-black bg-white px-2 py-1 text-xs font-black">← 목록</button>
+                  <button onClick={() => setSelectedFile(null)} className="lg:hidden shrink-0 border-2 border-black bg-white px-2 py-1 text-xs font-black">← 목록</button>
                   <span className="text-sm font-black truncate">{selectedFile.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1230,7 +1230,7 @@ export default function NotesPage() {
           ) : selectedFile ? (
             <>
               {/* Mobile back button row */}
-              <div className="md:hidden shrink-0 flex items-center gap-2 border-b-2 border-black bg-[#FFE500] px-3 py-2">
+              <div className="lg:hidden shrink-0 flex items-center gap-2 border-b-2 border-black bg-[#FFE500] px-3 py-2">
                 <button onClick={() => setSelectedFile(null)} className="border-2 border-black bg-white px-3 py-1 text-xs font-black">← 목록</button>
                 <span className="text-xs font-black truncate">{selectedFile.name}</span>
               </div>
@@ -1501,7 +1501,7 @@ export default function NotesPage() {
         </main>
 
         {/* Right Panel - Metadata */}
-        <aside className={`shrink-0 border-l-4 border-black bg-gray-50 transition-all hidden md:flex flex-col ${showMetaPanel ? 'w-56' : 'w-10'}`}>
+        <aside className={`shrink-0 border-l-4 border-black bg-gray-50 transition-all hidden lg:flex flex-col ${showMetaPanel ? 'w-56' : 'w-10'}`}>
           <div className="flex h-full flex-col">
             <div className="border-b-4 border-black bg-gray-100 p-3 flex items-center justify-between">
               {showMetaPanel && (
