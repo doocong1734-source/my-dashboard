@@ -25,6 +25,153 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* ── Galaxy Note 7 Theme ───────────────────────── */
+.theme-galaxy {
+  --g-bg: #0d1117;
+  --g-surface: #161b22;
+  --g-surface2: #1c2330;
+  --g-border: #30363d;
+  --g-accent: #0077ce;
+  --g-accent2: #58a6ff;
+  --g-text: #e6edf3;
+  --g-text-muted: #8b949e;
+  --g-yellow: #0077ce;
+  --g-green: #3fb950;
+  --g-purple: #bc8cff;
+  --g-red: #f85149;
+  --g-radius: 12px;
+  --g-shadow: 0 4px 24px rgba(0,119,206,0.15);
+}
+
+.theme-galaxy .dashboard-theme {
+  background: var(--g-bg) !important;
+  font-family: 'Roboto', 'Segoe UI', sans-serif !important;
+}
+
+/* Sidebar */
+.theme-galaxy aside {
+  background: var(--g-surface) !important;
+  border-color: var(--g-border) !important;
+  border-width: 1px !important;
+}
+.theme-galaxy aside > div:first-child {
+  background: linear-gradient(135deg, #0d47a1 0%, #1565c0 100%) !important;
+  border-color: transparent !important;
+  border-radius: 0 0 var(--g-radius) 0 !important;
+}
+.theme-galaxy aside > div:first-child h1,
+.theme-galaxy aside > div:first-child p {
+  color: #ffffff !important;
+}
+/* Nav links */
+.theme-galaxy nav a {
+  border-width: 1px !important;
+  border-color: var(--g-border) !important;
+  border-radius: 8px !important;
+  color: var(--g-text) !important;
+  font-weight: 400 !important;
+}
+.theme-galaxy nav a:hover {
+  background: rgba(88,166,255,0.12) !important;
+  border-color: var(--g-accent2) !important;
+  color: var(--g-accent2) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+/* ONLINE badge */
+.theme-galaxy .bg-black.text-\[#FFE500\] {
+  background: linear-gradient(90deg, #0d47a1, #1976d2) !important;
+  color: #ffffff !important;
+  border-radius: 6px !important;
+}
+/* Sign out */
+.theme-galaxy aside button {
+  background: var(--g-surface2) !important;
+  border-color: var(--g-border) !important;
+  border-width: 1px !important;
+  border-radius: 8px !important;
+  color: var(--g-text-muted) !important;
+  font-weight: 400 !important;
+  box-shadow: none !important;
+}
+.theme-galaxy aside button:hover {
+  background: var(--g-red) !important;
+  color: #fff !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Main content area */
+.theme-galaxy main,
+.theme-galaxy .bg-white,
+.theme-galaxy .bg-gray-50,
+.theme-galaxy .bg-gray-100 {
+  background: var(--g-surface) !important;
+}
+.theme-galaxy .bg-\[#f5f0e8\] {
+  background: var(--g-bg) !important;
+}
+
+/* Headers / yellow bars */
+.theme-galaxy .bg-\[#FFE500\] {
+  background: linear-gradient(90deg, #0d47a1 0%, #1565c0 100%) !important;
+}
+.theme-galaxy .bg-\[#FFE500\] * {
+  color: #ffffff !important;
+}
+
+/* Borders */
+.theme-galaxy .border-black,
+.theme-galaxy .border-b-4.border-black,
+.theme-galaxy .border-r-4.border-black,
+.theme-galaxy .border-l-4.border-black,
+.theme-galaxy .border-t-4.border-black {
+  border-color: var(--g-border) !important;
+  border-width: 1px !important;
+}
+
+/* Buttons */
+.theme-galaxy button.border-4,
+.theme-galaxy button.border-2 {
+  border-radius: 8px !important;
+  border-width: 1px !important;
+  font-weight: 500 !important;
+  box-shadow: var(--g-shadow) !important;
+}
+.theme-galaxy button:hover {
+  transform: none !important;
+  box-shadow: 0 0 0 2px var(--g-accent2) !important;
+}
+
+/* Text colors */
+.theme-galaxy .text-black { color: var(--g-text) !important; }
+.theme-galaxy .text-gray-400, .theme-galaxy .text-gray-500, .theme-galaxy .text-gray-600 {
+  color: var(--g-text-muted) !important;
+}
+.theme-galaxy .bg-black { background: var(--g-surface2) !important; }
+.theme-galaxy .bg-\[#B197FC\] { background: #bc8cff !important; }
+.theme-galaxy .bg-\[#69DB7C\] { background: #3fb950 !important; }
+.theme-galaxy .text-\[#B197FC\] { color: #bc8cff !important; }
+
+/* Cards / borders */
+.theme-galaxy .shadow-\[4px_4px_0_black\],
+.theme-galaxy .shadow-\[3px_3px_0_black\],
+.theme-galaxy .shadow-\[2px_2px_0_black\] {
+  box-shadow: var(--g-shadow) !important;
+}
+.theme-galaxy .rounded { border-radius: var(--g-radius) !important; }
+
+/* Textarea / input */
+.theme-galaxy textarea,
+.theme-galaxy input[type="text"],
+.theme-galaxy input[type="search"] {
+  background: var(--g-surface2) !important;
+  color: var(--g-text) !important;
+  border-color: var(--g-border) !important;
+}
+
+/* ── END Galaxy Theme ──────────────────────────── */
+
 .dashboard-theme,
 .dashboard-theme p,
 .dashboard-theme span,

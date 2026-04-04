@@ -213,6 +213,7 @@ export default function NotesPage() {
   const [frontmatter, setFrontmatter] = useState<Frontmatter>({ tags: [] });
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [syncScroll, setSyncScroll] = useState(true);
+  const [showMetaPanel, setShowMetaPanel] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -1491,15 +1492,20 @@ export default function NotesPage() {
         </main>
 
         {/* Right Panel - Metadata */}
-        <aside className="w-56 shrink-0 border-l-4 border-black bg-gray-50">
+        <aside className={`shrink-0 border-l-4 border-black bg-gray-50 transition-all ${showMetaPanel ? 'w-56' : 'w-10'}`}>
           <div className="flex h-full flex-col">
-            <div className="border-b-4 border-black bg-gray-100 p-3">
-              <h2 className="text-sm font-black uppercase tracking-wide text-black">
-                Metadata
-              </h2>
+            <div className="border-b-4 border-black bg-gray-100 p-3 flex items-center justify-between">
+              {showMetaPanel && (
+                <h2 className="text-sm font-black uppercase tracking-wide text-black">
+                  Metadata
+                </h2>
+              )}
+              <button onClick={() => setShowMetaPanel(v => !v)} className="text-black font-black text-xs hover:text-gray-500" title="메타데이터 패널 토글">
+                {showMetaPanel ? '›' : '‹'}
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className={`flex-1 overflow-y-auto p-3 ${!showMetaPanel ? 'hidden' : ''}`}>
               {selectedFile ? (
                 <div className="space-y-4">
                   {/* Tags */}

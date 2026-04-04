@@ -1,3 +1,5 @@
+export type DashboardTheme = 'brutalist' | 'galaxy'
+
 export type FeatureSettings = {
   scheduleCreateEnabled: boolean
   scheduleDeleteEnabled: boolean
@@ -5,6 +7,7 @@ export type FeatureSettings = {
   jobsStatusUpdateEnabled: boolean
   jobsDeleteEnabled: boolean
   skillDocGenerationEnabled: boolean
+  theme: DashboardTheme
 }
 
 export const defaultFeatureSettings: FeatureSettings = {
@@ -14,6 +17,7 @@ export const defaultFeatureSettings: FeatureSettings = {
   jobsStatusUpdateEnabled: true,
   jobsDeleteEnabled: true,
   skillDocGenerationEnabled: true,
+  theme: 'brutalist',
 }
 
 export const featureSettingsStorageKey = 'my-dashboard-feature-settings'

@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       end: { dateTime: endDateTime, timeZone: 'Asia/Seoul' },
     }
 
-    const res = await fetch(CALENDAR_BASE, {
+    const res = await fetch(calendarBase('primary'), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -147,7 +147,7 @@ export async function PATCH(req: NextRequest) {
       patchBody.end = { dateTime: endDateTime, timeZone: 'Asia/Seoul' }
     }
 
-    const res = await fetch(`${CALENDAR_BASE}/${encodeURIComponent(eventId)}`, {
+    const res = await fetch(`${calendarBase('primary')}/${encodeURIComponent(eventId)}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(patchBody),
@@ -186,7 +186,7 @@ export async function DELETE(req: NextRequest) {
   if (!eventId) return NextResponse.json({ error: 'eventId required' }, { status: 400 })
 
   try {
-    const res = await fetch(`${CALENDAR_BASE}/${encodeURIComponent(eventId)}`, {
+    const res = await fetch(`${calendarBase('primary')}/${encodeURIComponent(eventId)}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     })

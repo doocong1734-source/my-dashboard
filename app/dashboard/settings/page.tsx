@@ -65,7 +65,8 @@ export default function SettingsPage() {
     }
   }
 
-  const featureItems: Array<{ key: keyof typeof settings; label: string; description: string }> = [
+  type BooleanSettingKey = { [K in keyof typeof settings]: typeof settings[K] extends boolean ? K : never }[keyof typeof settings]
+  const featureItems: Array<{ key: BooleanSettingKey; label: string; description: string }> = [
     {
       key: 'scheduleCreateEnabled',
       label: '스케줄 생성',
