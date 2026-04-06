@@ -50,7 +50,6 @@ async function callOllama(messages: unknown[], systemPrompt?: string) {
 }
 
 async function callGoogleAI(messages: unknown[], systemPrompt?: string) {
-  // Google AI Studio - OpenAI-compatible endpoint
   const allMessages = systemPrompt
     ? [{ role: 'system', content: systemPrompt }, ...messages]
     : messages
@@ -72,7 +71,40 @@ async function callGoogleAI(messages: unknown[], systemPrompt?: string) {
     return new Response(JSON.stringify({ error: err }), { status: response.status })
   }
 
-  return new Response(response.body, {
+  // OpenAI 포맷 → Anthropic 포맷 변환 (프론트엔드 호환)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        for (const line of chunk.split('\n')) {
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6).trim()
+          if (data === '[DONE]') continue
+          try {
+            const parsed = JSON.parse(data)
+            const text = parsed.choices?.[0]?.delta?.content
+            if (text) {
+              // Anthropic 포맷으로 변환
+              const anthropicChunk = JSON.stringify({
+                type: 'content_block_delta',
+                delta: { text },
+              })
+              controller.enqueue(encoder.encode(`data: ${anthropicChunk}\n\n`))
+            }
+          } catch {}
+        }
+      }
+      controller.close()
+    },
+  })
+
+  return new Response(stream, {
     headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
   })
 }
