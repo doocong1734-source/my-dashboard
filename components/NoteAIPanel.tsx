@@ -259,18 +259,18 @@ export default function NoteAIPanel({
             className={`mb-4 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[85%] rounded-lg p-3 ${
+              className={`max-w-[85%] min-w-0 overflow-hidden rounded-lg p-3 ${
                 msg.role === 'user'
                   ? 'bg-yellow-400 text-black border-2 border-black shadow-[3px_3px_0_black]'
                   : 'bg-white text-black border-2 border-black shadow-[3px_3px_0_black]'
               }`}
             >
               {msg.role === 'assistant' ? (
-                <div className="prose-sm max-w-none">
+                <div className="prose-sm max-w-none break-words">
                   <MarkdownRenderer content={msg.content} />
                 </div>
               ) : (
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
               )}
             </div>
           </div>
@@ -278,8 +278,8 @@ export default function NoteAIPanel({
 
         {isStreaming && streamingText && (
           <div className="mb-4 flex justify-start">
-            <div className="max-w-[85%] rounded-lg bg-white p-3 border-2 border-black shadow-[3px_3px_0_black]">
-              <div className="prose-sm max-w-none">
+            <div className="max-w-[85%] min-w-0 overflow-hidden rounded-lg bg-white p-3 border-2 border-black shadow-[3px_3px_0_black]">
+              <div className="prose-sm max-w-none break-words">
                 <MarkdownRenderer content={streamingText + '▊'} />
               </div>
             </div>
