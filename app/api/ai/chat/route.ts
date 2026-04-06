@@ -51,6 +51,32 @@ const NOTE_TOOLS = [
       required: [],
     },
   },
+  {
+    name: 'create_folder',
+    description: '볼트 내에 새 폴더를 생성합니다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '폴더 이름' },
+        parentId: { type: 'string', description: '부모 폴더 ID (없으면 볼트 루트)' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'create_or_update_note',
+    description: '노트 파일을 생성하거나 내용을 업데이트합니다. fileId가 있으면 업데이트, 없으면 새로 생성합니다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '파일 이름 (.md 확장자 없이)' },
+        content: { type: 'string', description: '마크다운 내용' },
+        folderId: { type: 'string', description: '저장할 폴더 ID (없으면 볼트 루트)' },
+        fileId: { type: 'string', description: '업데이트할 파일 ID (새 파일이면 비워둘 것)' },
+      },
+      required: ['title', 'content'],
+    },
+  },
 ]
 
 type DriveClient = ReturnType<typeof google.drive>
@@ -155,6 +181,41 @@ async function executeTool(
     return JSON.stringify(tree)
   }
 
+  if (name === 'create_folder') {
+    const parentId = input.parentId || vaultFolderId
+    const res = await drive.files.create({
+      requestBody: {
+        name: input.name,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentId],
+      },
+      fields: 'id,name',
+    })
+    return JSON.stringify({ id: res.data.id, name: res.data.name })
+  }
+
+  if (name === 'create_or_update_note') {
+    const { Readable } = await import('stream')
+    const fileName = input.title.endsWith('.md') ? input.title : `${input.title}.md`
+    const content = input.content || ''
+
+    if (input.fileId) {
+      await drive.files.update({
+        fileId: input.fileId,
+        media: { mimeType: 'text/markdown', body: Readable.from([Buffer.from(content, 'utf-8')]) },
+      })
+      return JSON.stringify({ updated: true, fileId: input.fileId })
+    }
+
+    const folderId = input.folderId || vaultFolderId
+    const res = await drive.files.create({
+      requestBody: { name: fileName, mimeType: 'text/markdown', parents: [folderId] },
+      media: { mimeType: 'text/markdown', body: Readable.from([Buffer.from(content, 'utf-8')]) },
+      fields: 'id,name',
+    })
+    return JSON.stringify({ created: true, fileId: res.data.id, name: res.data.name })
+  }
+
   return 'Unknown tool'
 }
 
@@ -163,10 +224,12 @@ const TOOL_STATUS: Record<string, (input: Record<string, string>) => string> = {
   get_note_content: (i) => `📄 "${i.fileName || i.fileId}" 노트 읽는 중...`,
   list_notes: () => '📋 노트 목록 불러오는 중...',
   list_vault_structure: () => '📁 폴더 구조 불러오는 중...',
+  create_folder: (i) => `📁 "${i.name}" 폴더 생성 중...`,
+  create_or_update_note: (i) => `✍️ "${i.title}" 노트 저장 중...`,
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await getDriveAccessToken(req, ['drive.read'])
+  const auth = await getDriveAccessToken(req, ['drive.read', 'drive.write'])
   if (!auth.ok) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
 
   if (!MINIMAX_API_KEY) {
