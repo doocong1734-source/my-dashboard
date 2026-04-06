@@ -6,7 +6,7 @@ export const runtime = 'nodejs'
 const OLLAMA_BASE = process.env.OLLAMA_BASE_URL
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:e4b'
 const GOOGLE_AI_KEY = process.env.GOOGLE_AI_KEY
-const GOOGLE_AI_MODEL = 'gemma-3-27b-it' // Google AI Studio Gemma
+const GOOGLE_AI_MODEL = process.env.GOOGLE_AI_MODEL || 'gemini-2.0-flash' // Google AI Studio
 
 export async function POST(req: NextRequest) {
   const auth = await getDriveAccessToken(req, ['drive.read'])
