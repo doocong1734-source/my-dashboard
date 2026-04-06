@@ -3,7 +3,8 @@ import { getDriveAccessToken } from '@/lib/drive-auth'
 
 export const runtime = 'nodejs'
 
-const OLLAMA_BASE = process.env.OLLAMA_BASE_URL
+// Vercel 배포 환경에서는 Ollama 사용 안 함 (로컬 전용)
+const OLLAMA_BASE = process.env.VERCEL ? undefined : process.env.OLLAMA_BASE_URL
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:e4b'
 const GOOGLE_AI_KEY = process.env.GOOGLE_AI_KEY
 const GOOGLE_AI_MODEL = process.env.GOOGLE_AI_MODEL || 'gemini-2.0-flash' // Google AI Studio
