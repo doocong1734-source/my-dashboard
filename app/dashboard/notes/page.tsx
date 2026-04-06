@@ -1800,6 +1800,7 @@ export default function NotesPage() {
         noteTitle={selectedFile?.name.replace(/\.md$/, '') ?? ''}
         noteContent={content}
         noteFileId={selectedFile?.id ?? null}
+        vaultFolderId={vaultFolderId}
       />
 
       {/* Phase 5: Graph View */}

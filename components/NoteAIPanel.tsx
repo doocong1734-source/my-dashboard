@@ -15,9 +15,13 @@ interface NoteAIPanelProps {
   noteTitle: string
   noteContent: string
   noteFileId: string | null
+  vaultFolderId?: string | null
 }
 
-const SYSTEM_PROMPT = '당신은 노트 작성을 도와주는 AI 어시스턴트입니다. 한국어로 답변하세요.'
+const SYSTEM_PROMPT =
+  '당신은 사용자의 개인 노트 볼트를 관리하는 AI 어시스턴트입니다. ' +
+  '필요하면 search_notes, get_note_content, list_notes 도구를 사용해 노트를 검색하고 읽을 수 있습니다. ' +
+  '한국어로 답변하세요.'
 
 export default function NoteAIPanel({
   isOpen,
@@ -26,11 +30,13 @@ export default function NoteAIPanel({
   noteTitle,
   noteContent,
   noteFileId,
+  vaultFolderId,
 }: NoteAIPanelProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingText, setStreamingText] = useState('')
+  const [toolStatus, setToolStatus] = useState('')
   const [isFirstMessage, setIsFirstMessage] = useState(true)
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -69,6 +75,7 @@ export default function NoteAIPanel({
       abortControllerRef.current.abort()
       setIsStreaming(false)
       setStreamingText('')
+      setToolStatus('')
     }
   }, [])
 
@@ -79,6 +86,7 @@ export default function NoteAIPanel({
     setInput('')
     setIsStreaming(true)
     setStreamingText('')
+    setToolStatus('')
 
     let contextMessage = ''
     if (isFirstMessage) {
@@ -107,6 +115,7 @@ export default function NoteAIPanel({
             { role: 'system', content: SYSTEM_PROMPT },
             ...conversationMessages,
           ],
+          vaultFolderId: vaultFolderId ?? null,
         }),
         signal: abortControllerRef.current.signal,
       })
@@ -134,6 +143,9 @@ export default function NoteAIPanel({
             if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
               accumulated += parsed.delta.text
               setStreamingText(accumulated)
+              setToolStatus('')
+            } else if (parsed.type === 'tool_status' && parsed.text) {
+              setToolStatus(parsed.text)
             }
           } catch {}
         }
@@ -150,8 +162,9 @@ export default function NoteAIPanel({
     } finally {
       setIsStreaming(false)
       setStreamingText('')
+      setToolStatus('')
     }
-  }, [input, isStreaming, isFirstMessage, noteTitle, noteContent, messages])
+  }, [input, isStreaming, isFirstMessage, noteTitle, noteContent, messages, vaultFolderId])
 
   const quickActions = [
     { label: '요약', prompt: '이 노트를 3-5개의 핵심 포인트로 요약해줘' },
@@ -277,7 +290,7 @@ export default function NoteAIPanel({
           <div className="mb-4 flex justify-start">
             <div className="flex items-center gap-2 rounded-lg bg-white p-3 border-2 border-black shadow-[3px_3px_0_black]">
               <Loader2 className="h-4 w-4 animate-spin text-black" />
-              <span className="text-sm font-medium text-black">생각 중...</span>
+              <span className="text-sm font-medium text-black">{toolStatus || '생각 중...'}</span>
             </div>
           </div>
         )}
