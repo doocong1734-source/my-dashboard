@@ -40,6 +40,17 @@ const NOTE_TOOLS = [
       required: [],
     },
   },
+  {
+    name: 'list_vault_structure',
+    description: '볼트의 폴더 구조와 파일을 트리 형태로 보여줍니다. 어떤 폴더들이 있는지 파악하거나 특정 폴더 내 파일을 확인할 때 사용하세요.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        folderId: { type: 'string', description: '조회할 폴더 ID (없으면 볼트 루트)' },
+      },
+      required: [],
+    },
+  },
 ]
 
 type DriveClient = ReturnType<typeof google.drive>
@@ -111,6 +122,39 @@ async function executeTool(
     return fileRes.data as string
   }
 
+  if (name === 'list_vault_structure') {
+    const rootId = input.folderId || vaultFolderId
+    type Entry = { id: string; name: string; type: 'folder' | 'file'; children?: Entry[] }
+
+    async function fetchFolder(folderId: string): Promise<Entry[]> {
+      const entries: Entry[] = []
+      let pageToken: string | undefined
+      do {
+        const res = await drive.files.list({
+          q: `'${folderId}' in parents and trashed = false`,
+          pageSize: 100,
+          fields: 'nextPageToken, files(id,name,mimeType)',
+          pageToken,
+          orderBy: 'name',
+        })
+        for (const f of res.data.files || []) {
+          if (!f.id || !f.name) continue
+          if (f.mimeType === 'application/vnd.google-apps.folder') {
+            const children = await fetchFolder(f.id)
+            entries.push({ id: f.id, name: f.name, type: 'folder', children })
+          } else {
+            entries.push({ id: f.id, name: f.name.replace(/\.md$/, ''), type: 'file' })
+          }
+        }
+        pageToken = res.data.nextPageToken ?? undefined
+      } while (pageToken)
+      return entries
+    }
+
+    const tree = await fetchFolder(rootId)
+    return JSON.stringify(tree)
+  }
+
   return 'Unknown tool'
 }
 
@@ -118,6 +162,7 @@ const TOOL_STATUS: Record<string, (input: Record<string, string>) => string> = {
   search_notes: (i) => `🔍 "${i.query}" 검색 중...`,
   get_note_content: (i) => `📄 "${i.fileName || i.fileId}" 노트 읽는 중...`,
   list_notes: () => '📋 노트 목록 불러오는 중...',
+  list_vault_structure: () => '📁 폴더 구조 불러오는 중...',
 }
 
 export async function POST(req: NextRequest) {
