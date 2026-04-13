@@ -5,13 +5,14 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, CalendarDays, BriefcaseBusiness, Settings,
-  HardDrive, WandSparkles, NotebookPen, Bot, Menu, X
+  HardDrive, WandSparkles, NotebookPen, Bot, Menu, X, Newspaper
 } from 'lucide-react'
 import { SignOutButton } from './SignOutButton'
 import ThemeToggleButton from './ThemeToggleButton'
 
 const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
+  { href: '/dashboard/news', label: '뉴스', icon: Newspaper },
   { href: '/dashboard/notes', label: 'Notes', icon: NotebookPen },
   { href: '/dashboard/ai', label: 'AI Chat', icon: Bot },
   { href: '/dashboard/documents', label: '스케줄', icon: CalendarDays },
