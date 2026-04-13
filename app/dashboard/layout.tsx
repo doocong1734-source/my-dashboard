@@ -12,7 +12,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <DashboardThemeWrapper>
-      <div className="dashboard-theme flex flex-col lg:flex-row h-screen bg-[#f5f0e8] font-mono">
+      <div className="dashboard-theme flex flex-col lg:flex-row h-screen bg-[#f5f0e8]">
         <MobileSidebar />
         {/* 메인 */}
         <main className="flex-1 overflow-auto min-w-0 lg:pt-0 pt-[57px]">
