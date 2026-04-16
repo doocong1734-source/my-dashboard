@@ -172,6 +172,35 @@ body {
   border-color: var(--g-border) !important;
 }
 
+/* 다크 배경에서 누락된 색상 보완 */
+.theme-galaxy .bg-\[#FF6B6B\] {
+  background: var(--g-red) !important;
+  color: #ffffff !important;
+}
+.theme-galaxy .bg-\[#FF6B6B\] * { color: #ffffff !important; }
+.theme-galaxy .bg-red-500,
+.theme-galaxy .bg-red-600 {
+  background: var(--g-red) !important;
+}
+.theme-galaxy .bg-red-500 *,
+.theme-galaxy .bg-red-600 * { color: #ffffff !important; }
+.theme-galaxy .bg-red-100,
+.theme-galaxy .bg-red-50 {
+  background: rgba(248,81,73,0.12) !important;
+}
+.theme-galaxy .bg-yellow-50,
+.theme-galaxy .bg-yellow-100 {
+  background: var(--g-surface2) !important;
+}
+.theme-galaxy .text-red-600,
+.theme-galaxy .text-red-500 { color: var(--g-red) !important; }
+.theme-galaxy .border-red-500,
+.theme-galaxy .border-red-600 { border-color: var(--g-red) !important; }
+.theme-galaxy .hover\:bg-gray-100:hover { background: var(--g-surface2) !important; }
+.theme-galaxy .hover\:bg-gray-800:hover { background: var(--g-surface) !important; }
+.theme-galaxy .bg-\[#69DB7C\] * { color: #ffffff !important; }
+.theme-galaxy .bg-\[#B197FC\] * { color: #ffffff !important; }
+
 /* ── END Galaxy Theme ──────────────────────────── */
 
 /* 본문 텍스트: 일반 굵기 */
@@ -203,6 +232,24 @@ body {
 .dashboard-theme h6 {
   color: #111111;
   font-weight: 700;
+}
+
+/* 일반테마: 어두운 배경 위에서는 흰 글자 강제 */
+.dashboard-theme .bg-black,
+.dashboard-theme .bg-black p,
+.dashboard-theme .bg-black span,
+.dashboard-theme .bg-black small,
+.dashboard-theme .bg-black li,
+.dashboard-theme .bg-black a,
+.dashboard-theme .bg-black button,
+.dashboard-theme .bg-black label,
+.dashboard-theme .bg-black h1,
+.dashboard-theme .bg-black h2,
+.dashboard-theme .bg-black h3,
+.dashboard-theme .bg-black h4,
+.dashboard-theme .bg-black h5,
+.dashboard-theme .bg-black h6 {
+  color: #ffffff !important;
 }
 
 /* Galaxy 테마: 어두운 배경에 밝은 글자 */
