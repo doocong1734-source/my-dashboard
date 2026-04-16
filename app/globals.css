@@ -181,6 +181,28 @@ body {
   background: rgba(88,166,255,0.2) !important;
 }
 
+/* 누락된 밝은 배경색 → 다크 서피스 변환 */
+.theme-galaxy .bg-blue-50,
+.theme-galaxy .bg-blue-100,
+.theme-galaxy .bg-gray-200,
+.theme-galaxy .bg-gray-300,
+.theme-galaxy .bg-green-50,
+.theme-galaxy .bg-green-100,
+.theme-galaxy .bg-purple-50,
+.theme-galaxy .bg-\[#f5f0e8\] {
+  background: var(--g-surface2) !important;
+}
+.theme-galaxy .hover\:bg-gray-100:hover,
+.theme-galaxy .hover\:bg-gray-200:hover,
+.theme-galaxy .hover\:bg-gray-300:hover,
+.theme-galaxy .hover\:bg-yellow-300:hover {
+  background: var(--g-surface2) !important;
+}
+.theme-galaxy .border-gray-200,
+.theme-galaxy .border-gray-300 {
+  border-color: var(--g-border) !important;
+}
+
 /* 다크 배경에서 누락된 색상 보완 */
 .theme-galaxy .bg-\[#FF6B6B\] {
   background: var(--g-red) !important;
