@@ -172,6 +172,15 @@ body {
   border-color: var(--g-border) !important;
 }
 
+/* hover:bg-yellow-50 / hover:bg-[#FFFDE7] Galaxy 대응 */
+.theme-galaxy .hover\:bg-yellow-50:hover,
+.theme-galaxy .hover\:bg-\[#FFFDE7\]:hover {
+  background: var(--g-surface2) !important;
+}
+.theme-galaxy .hover\:bg-\[#FFE500\]:hover {
+  background: rgba(88,166,255,0.2) !important;
+}
+
 /* 다크 배경에서 누락된 색상 보완 */
 .theme-galaxy .bg-\[#FF6B6B\] {
   background: var(--g-red) !important;

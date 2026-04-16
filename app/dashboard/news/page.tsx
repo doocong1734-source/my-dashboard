@@ -131,11 +131,11 @@ export default function NewsPage() {
           <button
             key={kw}
             onClick={() => setActiveKeyword(kw)}
-            style={activeKeyword === kw
-              ? { backgroundColor: '#FFE500', color: '#000', border: '2px solid #000', boxShadow: '3px 3px 0 #000' }
-              : { backgroundColor: 'transparent', color: 'inherit', border: '2px solid currentColor' }
-            }
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-bold transition-all hover:opacity-80"
+            className={`flex items-center gap-1 px-3 py-1.5 text-sm font-bold border-2 transition-all hover:opacity-80 ${
+              activeKeyword === kw
+                ? 'bg-[#FFE500] text-black border-black shadow-[3px_3px_0_#000]'
+                : 'bg-transparent border-current'
+            }`}
           >
             {kw}
             {!DEFAULT_KEYWORDS.includes(kw) && (
@@ -169,25 +169,22 @@ export default function NewsPage() {
               href={item.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="block p-4 transition-all group"
-              style={{ border: '2px solid #000', backgroundColor: '#fff', color: '#000' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#FFFDE7'; (e.currentTarget as HTMLElement).style.boxShadow = '4px 4px 0 #000'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#fff'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+              className="block p-4 border-2 border-black bg-white text-black transition-all hover:bg-yellow-50 hover:shadow-[4px_4px_0_#000] group"
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-black px-2 py-0.5" style={{ backgroundColor: '#000', color: '#FFE500' }}>
+                <span className="text-xs font-black px-2 py-0.5 bg-black text-[#FFE500]">
                   {extractSource(item.originallink || item.link)}
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono" style={{ color: '#888' }}>{timeAgo(item.pubDate)}</span>
-                  <ExternalLink size={12} style={{ color: '#aaa' }} />
+                  <span className="text-xs font-mono text-gray-500">{timeAgo(item.pubDate)}</span>
+                  <ExternalLink size={12} className="text-gray-400" />
                 </div>
               </div>
-              <h3 className="text-sm font-bold leading-snug mb-2 line-clamp-2" style={{ color: '#000' }}>
+              <h3 className="text-sm font-bold leading-snug mb-2 line-clamp-2 text-black">
                 {item.title}
               </h3>
               {item.description && (
-                <p className="text-xs leading-relaxed line-clamp-2" style={{ color: '#555' }}>
+                <p className="text-xs leading-relaxed line-clamp-2 text-gray-600">
                   {item.description}
                 </p>
               )}
